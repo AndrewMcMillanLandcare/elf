@@ -331,11 +331,13 @@ LCDBxCLTL_adj = st_read(LCDBxCLTL_adj_ffn)
 outside_polys_filtered = outside_polys_flagged %>% 
   filter(KEEP_FLAG == "KEEP")
 
-# outside_polys_filtered_buff = st_buffer(outside_polys_filtered, 10)
-outside_polys_filtered_UNN = outside_polys_filtered %>% 
-  validate_sh() %>% 
-  group_by(LCDB_UID) %>% 
-  st_union(by_feature = T)
+
+outside_polys_filtered_UNN_ffn = paste0(NTL_dn, "outside_polys_filtered_UNN.gpkg")
+st_write(outside_polys_filtered_UNN, outside_polys_filtered_UNN_ffn, append = F)
+
+outside_polys_filtered_UNN_ffn = paste0(NTL_dn, "outside_polys_filtered_UNN.gpkg")
+st_write(outside_polys_filtered_UNN, outside_polys_filtered_UNN_ffn, append = F)
+
 
 inside_polys_filtered_UNN = LCDBxCLTL_adj %>% 
   filter(Class_2018 %in% TL_classes_unfilt) %>% 
@@ -343,14 +345,73 @@ inside_polys_filtered_UNN = LCDBxCLTL_adj %>%
   group_by(LCDB_UID) %>% 
   st_union(by_feature = T)
 
+inside_polys_filtered_UNN_ffn = paste0(NTL_dn, "inside_polys_filtered_UNN.gpkg")
+st_write(inside_polys_filtered_UNN, inside_polys_filtered_UNN_ffn, append = F)
 
-all_polys_filtered_UNN = st_union(outside_polys_filtered_UNN, inside_polys_filtered_UNN, by_feature = T)
 
 
-LCDBxCLTL_adj %>% pull(Class_2018) %>% unique()
+#-----------------------testing how to do spatial join by field -----#
+# define a test area
 
-outside_polys_filtered_UNN_ffn = paste0(NTL_dn, "outside_polys_filtered_UNN.gpkg")
-st_write(outside_polys_filtered_UNN, outside_polys_filtered_UNN_ffn, append = F)
+TB = st_read(paste0(AL_dn, "testbox2.shp"))
+
+outside_polys_filtered_UNN_clip = st_intersection(outside_polys_filtered_UNN, TB)
+inside_polys_filtered_UNN_clip = st_intersection(inside_polys_filtered_UNN, TB)
+
+
+
+
+all_polys_filtered_UNN_clip = outside_polys_filtered_UNN_clip %>% 
+  bind_rows(inside_polys_filtered_UNN_clip) %>% 
+  group_by(LCDB_UID) %>% 
+  summarise(LCDB_UID_first = first(LCDB_UID))
+
+C = mapview(all_polys_filtered_UNN_clip)
+
+outside_polys_filtered_UNN_clip$mean_alt
+
+A = mapview(outside_polys_filtered_UNN_clip)
+B = mapview(inside_polys_filtered_UNN_clip, col.region = "pink")
+
+B + A
+
+#------------- end of test ---------#
+
+
+# combine the polys in and out then spatially join the polys with the same UID
+# this takes about 10 minutes. You also lose all the data except for the geometry
+# we get 35619 features
+
+tic()
+all_polys_filtered = inside_polys_filtered_UNN %>% 
+  bind_rows(outside_polys_filtered_UNN) %>% 
+  group_by(LCDB_UID) %>% 
+  summarise(LCDB_UID_first = first(LCDB_UID))
+toc()
+
+#write this new layer to disk
+all_polys_filtered_ffn = paste0(NTL_dn, "all_polys_filtered.gpkg")
+st_write(all_polys_filtered, all_polys_filtered_ffn)
+
+
+LCDBxCLTL_adj_nogeo = LCDBxCLTL_adj %>% 
+  st_set_geometry(NULL) %>% 
+  as_tibble()
+
+#join in the data
+all_polys_filtered_mdf = all_polys_filtered %>% 
+  left_join(LCDBxCLTL_adj_nogeo, by = "LCDB_UID")
+
+# tic()
+# all_polys_filtered_UNN = 
+#   all_polys_filtered %>% 
+#   group_by(LCDB_UID) %>% 
+#   summarise(Class_2018_first = first(Class_2018)) %>% 
+#   st_cast()
+# toc()
+
+
+
 
 
 mapview(outside_polys_filtered_CMB)
@@ -556,6 +617,26 @@ LIT_sel = LIT %>% filter(name=="otago")
 
 mapview(LIT_sel)
 
+
+```
+
+```{r}
+
+franconia %>% 
+  group_by(district)
+
+mapview(franconia)
+
+franconia %>% 
+  group_by(district) %>%
+  st_union() %>%
+  mapview(zcol = "district")
+
+franconia %>% 
+  group_by(district) %>% 
+  summarise(m = mean(SHAPE_LEN)) %>% 
+  st_cast() %>% 
+  mapview(zcol = "m")
 
 ```
 
