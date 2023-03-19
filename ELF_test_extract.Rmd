@@ -1,0 +1,465 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+
+
+
+# Glossary
+
+CLTL = Cieraard Latitude Treeline
+LCDB = MWLR's Land Cover Database
+
+
+# Libraries and folders
+
+
+```{r}
+
+
+library(tidyverse)
+library(rjson)
+library(sf)
+library(mapview)
+library(terra)
+library(tictoc)
+source("D:/HerronK/ELF_Project/AndrewsWork/MyCode/R/ea_utils.R")
+
+#set up the data folders
+rdn = "D:/HerronK/ELF_Project/"
+CLTL_rdn = paste0(rdn, "ELFData/Cieraad/")
+AL_dn = paste0(rdn,"AndrewsWork/layers/")
+```
+
+
+
+```{r}
+
+
+
+```
+
+
+# get the CLTL
+
+```{r}
+
+#set up the data folders
+rdn = "D:/HerronK/ELF_Project/"
+CLTL_rdn = paste0(rdn, "ELFData/Cieraad/")
+AL_dn = paste0(rdn,"AndrewsWork/layers/")
+
+#read the Cieraad Treeline based on the original regression
+CLTL_ffn = paste0(CLTL_rdn,"Vector-TL-Cieraad/out.shp")
+CLTL = st_read(CLTL_ffn)
+
+#read the Cieraad Treeline based on the original regression adjusted by 100m for the NI
+CLTL_NI_100m_ffn = paste0(CLTL_rdn,"NI_100m_vector_Cieraad/out.shp")
+CLTL_NI_100m = st_read(CLTL_NI_100m_ffn) %>% 
+  mutate(Island = "NI")
+
+#read a polygon for the North Island
+NI_poly_ffn = paste0(AL_dn,"NI.gpkg")
+NI_poly = st_read(NI_poly_ffn)
+
+#read a polygon for the North Island
+SI_poly_ffn = paste0(AL_dn,"SI.gpkg")
+SI_poly = st_read(SI_poly_ffn)
+
+#grab the original tree line for the SI only
+CLTL_SI =st_intersection(CLTL, SI_poly) %>% 
+  mutate(Island = "SI") %>% 
+  select(DN, Island)
+
+# mapview(SI_poly)
+# mapview(CLTL)
+# mapview(CLTL_SI)
+
+#combine it with the adjusted treeline for the North Is
+CLTL_adj = CLTL_SI %>% bind_rows(CLTL_NI_100m)
+mapview(CLTL_adj)
+
+#save the combined/NI-Adjusted tree line
+CLTL_adj_ffn = paste0(AL_dn,"CLTL_adj.gpkg")
+st_write(CLTL_adj, CLTL_adj_ffn, append = F)
+st_read(CLTL_adj_ffn)
+
+```
+
+
+
+# Now intersect the CLTL_adj with LCDB
+
+```{r}
+
+LCDB5_ffn = "D:/HerronK/ELF_Project/ELFData/LCDB/lcdb-v50-land-cover-database-version-50-mainland-new-zealand.gpkg"
+LCDB5 = st_read(LCDB5_ffn)
+
+CLTL_adj_ffn = paste0(AL_dn,"CLTL_adj.gpkg")
+CLTL_adj = st_read(CLTL_adj_ffn)
+
+tic("Intersecting LCDB5 and CLTL_adj")
+LCDBxCLTL_adj = ea_intersection(LCDB5, CLTL_adj, PC = "PNGeo04-W10", "LCDBxCLTL_adj", dn = AL_dn, val = "none", parallel = T, ncore = 7, filetype = "GPKG", diff_opt = F, simplify_opt = F, tol = NULL)
+toc()
+
+
+LCDBxCLTL_adj_ffn = paste0(AL_dn, "LCDBxCLTL_adj.gpkg")
+st_write(LCDBxCLTL_adj, LCDBxCLTL_adj_ffn, append = F)  
+
+```
+
+# Get diff between clipped features and LCDB features that intersect with CLTL
+
+```{r}
+
+
+#Define the full set of treeline classes
+TL_classes_unfilt = c(14,15,16,43,55)
+
+
+
+if (!exists("LCDBxCLTL_adj")){
+  LCDBxCLTL_adj_ffn = paste0(AL_dn, "LCDBxCLTL_adj.gpkg")
+  LCDBxCLTL_adj = st_read(LCDBxCLTL_adj_ffn)  
+}
+
+if (!exists("LCDB5")){
+  LCDB5_ffn = "D:/HerronK/ELF_Project/ELFData/LCDB/lcdb-v50-land-cover-database-version-50-mainland-new-zealand.gpkg"
+  LCDB5 = st_read(LCDB5_ffn)
+
+}
+
+# get the LCDB features that intersect with the CTLT
+intersecting_features = LCDBxCLTL_adj %>% pull(LCDB_UID) %>% unique()
+LCDB5_intersecting_feat = LCDB5 %>% 
+  filter(LCDB_UID %in% intersecting_features & Class_2018 %in% TL_classes_unfilt)
+
+mapview(LCDB5_intersecting_feat)
+
+# now create a layer of the split features that lie outside of the CLTL (takes 7 minutes sec)
+tic("Getting difference between LCDB5_intersecting_feat and LCDBxCLTL_adj")
+LCDB5_intersecting_feat_minus_LCDBxCLTL_adj = getLayerDiff(LCDB5_intersecting_feat, LCDBxCLTL_adj)
+toc()
+
+#add in the island information
+
+island_key = LCDBxCLTL_adj %>% 
+  st_set_geometry(NULL) %>% 
+  select(LCDB_UID, Island) %>% 
+  distinct() %>% 
+  as_tibble()
+
+LCDB5_intersecting_feat_minus_LCDBxCLTL_adj = LCDB5_intersecting_feat_minus_LCDBxCLTL_adj %>% 
+  left_join(island_key, by = "LCDB_UID")
+
+
+LCDB5_intersecting_feat_minus_LCDBxCLTL_adj_ffn = paste0(AL_dn, "New-Treeline-Layers/LCDB5_intersecting_feat_minus_LCDBxCLTL_adj.gpkg")
+st_write(LCDB5_intersecting_feat_minus_LCDBxCLTL_adj, LCDB5_intersecting_feat_minus_LCDBxCLTL_adj_ffn,append = F)
+
+
+
+```
+
+# set DEM zonal stats of treeline layer
+
+```{r}
+
+library(exactextractr)
+# 
+# # load the layer
+# if (!exists("LCDBxCLTL_adj")){
+#   LCDBxCLTL_adj_ffn = paste0(AL_dn, "LCDBxCLTL_adj.gpkg")
+#   LCDBxCLTL_adj = st_read(LCDBxCLTL_adj_ffn)  
+# }
+
+LCDB5_intersecting_feat_minus_LCDBxCLTL_adj_ffn = paste0(AL_dn, "New-Treeline-Layers/LCDB5_intersecting_feat_minus_LCDBxCLTL_adj.gpkg")
+LCDB5_intersecting_feat_minus_LCDBxCLTL_adj = st_read(LCDB5_intersecting_feat_minus_LCDBxCLTL_adj_ffn)
+
+outside_polys = LCDB5_intersecting_feat_minus_LCDBxCLTL_adj
+
+# grab the dem
+
+dem_ffn = "D:/HerronK/ELF_Project/ELFData/NZ_DEM/dem_linz_nz_110520_orthonzgd49h_nztm_10m.kea"
+dem = rast(dem_ffn)
+
+# extract zonal stats from the DEM
+
+outside_polys$alt_stats = exactextractr::exact_extract(dem, outside_polys, c("min", "mean"))
+
+outside_polys_w_ZSTATS = outside_polys %>% 
+  mutate(min_alt = alt_stats$min, mean_alt = alt_stats$mean) %>% 
+  select(-contains("stats"))
+
+
+
+names(LCDBxCLTL_adj)  
+names(outside_polys_w_ZSTATS)  
+# save the data with the Zonal Stats
+
+# LCDBxCLTL_adj_w_ZSTATS_ffn = paste0(AL_dn, "LCDBxCLTL_adj_w_ZSTATS_v02.gpkg")
+# st_write(LCDBxCLTL_adj_w_ZSTATS, LCDBxCLTL_adj_w_ZSTATS_ffn, append = F)
+
+
+outside_polys_w_ZSTATS_ffn = paste0(AL_dn, "outside_polys_w_ZSTATS.gpkg")
+st_write(outside_polys_w_ZSTATS, outside_polys_w_ZSTATS_ffn, append = F)
+
+names(LCDBxCLTL_adj_w_ZSTATS)
+
+```
+
+
+# Now apply the rules set out in Section 3.2ii of Caitlin's Report
+
+```{r}
+
+outside_polys_w_ZSTATS_ffn = paste0(AL_dn, "outside_polys_w_ZSTATS.gpkg")
+outside_polys_w_ZSTATS = st_read(outside_polys_w_ZSTATS_ffn)
+
+
+#Class 16 (Gravel and Rock) Rules
+# 1. Any Class 16 Features that lie fully or mostly within layer are kept
+# 2. Any Class 16 Features that intersect with layer but are mostly outside CLTL
+# 1. Any Class 16 Features that lie within layer are kept
+
+# #check that LCDB_UID is indeed a unique ID --> CONFIRMED
+# (LCDB5 %>% pull(LCDB_UID) %>% unique() %>% length()) == LCDB5 %>% nrow()
+# 
+# #get the original areas of each polygon from LCDB
+# LCDB5_orig_areas = LCDB5 %>% 
+#   mutate(ORIG_AREA_ha = as.numeric(st_area(.))/1e4) %>% 
+#   st_set_geometry(NULL) %>% 
+#   select(LCDB_UID, ORIG_AREA_ha)
+
+
+#for all the intersecting polygons add the orginal area
+outside_polys_w_ZSTATS_mdf = 
+  outside_polys_w_ZSTATS %>% mutate(AREA_ha = as.numeric(st_area(.))/1e4) 
+
+
+
+#create flags:
+# TREELINE_CLASS_FLAG: if class is 14,15,43,55
+# CLASS 14: Permanent Snow and Ice
+# CLASS 15: Alpine grass / herbfield
+# CLASS_16: if class is 16 (gravel and rock)
+# CLASS_43_OR_55_FLAG (43 = Tall Tussuck, 55 = Sub-Alpine Scrubland)
+# CLASS_43_OR_55_GOOD_ALT ()
+
+FRAC_INSIDE_THRESH = 0.5
+
+#Apply the Filtering Logic on P3-4 of ETL report
+
+New_TL_unfilt_w_FLAGS = outside_polys_w_ZSTATS_mdf %>% 
+  #flag the class 16 data that mostly lie outside CLTL
+  mutate(
+    TREELINE_CLASS_FLAG = ifelse(Class_2018 %in% TL_classes_unfilt, TRUE, FALSE),
+    KEEP_FLAG = case_when(
+      # Not a treeline class -> Reject
+      !TREELINE_CLASS_FLAG ~ "REJECT",
+      # Class 14 and 15 are automatically kept
+      Class_2018 == 14 | Class_2018 == 15 ~ "KEEP",
+      # Class 16 features mostly outside and original area is > 10 ha need to be checked
+      (Class_2018 == 16) & (AREA_ha >= 10)  ~ "CHECK",
+      (Class_2018 == 16) & (ORIG_AREA_ha < 10)  ~ "KEEP",
+      # (Class_2018 != 16) & (FRAC_INSIDE >= FRAC_INSIDE_THRESH) ~ "N/A",
+      # Class 43 and 55
+      (Class_2018 == 43 | Class_2018 == 55) & (Island == "NI") & (min_alt > 900 | mean_alt > 1200) ~ "KEEP",
+      (Class_2018 == 43 | Class_2018 == 55) & (Island == "NI") & (min_alt <= 900 & mean_alt <= 1200) ~ "CHECK",
+      (Class_2018 == 43 | Class_2018 == 55) & (Island == "SI") &  (mean_alt > 1300) ~ "KEEP",
+      (Class_2018 == 43 | Class_2018 == 55) & (Island == "SI") &   mean_alt > 1200 & min_alt > 400 ~ "KEEP",
+      (Class_2018 == 43 | Class_2018 == 55) & (Island == "SI") &  (mean_alt <= 1200 | min_alt <= 400) ~ "CHECK",
+      (Class_2018 == 43 | Class_2018 == 55) & (Island == "SI") &  (mean_alt < 1300 & (!(mean_alt > 1200 & min_alt > 400))) ~ "CHECK"))
+
+New_TL_unfilt_w_FLAGS_ffn = paste0(AL_dn,"New-Treeline-Layers/New_TL_unfilt_w_FLAGS.gpkg")
+st_write(New_TL_unfilt_w_FLAGS, New_TL_unfilt_w_FLAGS_ffn, append = F)
+
+# New_TL_unfilt_w_FLAGS_ffn2 = paste0(AL_dn,"New-Treeline-Layers/New_TL_unfilt_w_FLAGS.shp")
+# st_write(New_TL_unfilt_w_FLAGS, New_TL_unfilt_w_FLAGS_ffn2)
+
+#Save the layer to check
+
+New_TL_filtered_to_CHECK = New_TL_unfilt_w_FLAGS %>% 
+  filter(KEEP_FLAG == "CHECK")
+
+New_TL_filtered_to_CHECK_ffn = paste0(AL_dn,"New-Treeline-Layers/New_TL_filtered_to_CHECK.gpkg")
+st_write(New_TL_filtered_to_CHECK, New_TL_filtered_to_CHECK_ffn, append = F)
+
+
+#Create a new layer with just the shapes to check
+
+New_TL_filtered_to_CHECK
+
+
+
+
+
+```
+
+
+
+#Test Extract
+
+```{r}
+
+
+dn = "D:/HerronK/ELF_Project/Taranaki/TaranakiProfiles/"
+fn = "taranaki2_chmProfile.json"
+ffn = paste0(dn,fn)
+
+dn = "D:/HerronK/ELF_Project/gw/gwProfiles/"
+fn = "gw6_chmProfile.json"
+ffn = paste0(dn,fn)
+
+
+file.exists(ffn)
+
+prof = fromJSON(file = ffn) # %>% map_df(as_tibble)
+prof[[1]]
+
+df <- data.frame(matrix(unlist(prof), ncol = max(lengths(prof))+1, byrow = TRUE)) %>% as_tibble()
+nms = c("dist",   "coords_1", "coords_2", "Min",    "Mean",   "Median", "Max",    "Std"   )
+
+names(df) = nms
+
+
+g = ggplot(df) + geom_line(aes(dist, Mean))
+g
+
+df_mdf = df %>% 
+  mutate(
+    coords_1_diff = c(0,diff(coords_1)),
+    coords_2_diff = c(0,diff(coords_2)),
+    coords_1_diff_sq = coords_1_diff^2,
+    coords_2_diff_sq = coords_2_diff^2,
+    coords_dist = sqrt(coords_1_diff_sq + coords_2_diff_sq))
+
+
+
+
+coords_tr = df_mdf %>% select(lat = coords_1, lon = coords_2)
+
+coords_sf = st_as_sf(coords_tr, coords = c("lat", "lon"), crs = 2193)
+mapview(coords_sf)
+
+coords_shp_ffn =  "D:/HerronK/ELF_Project/AndrewsWork/TestTr.shp"
+st_write(coords_sf , coords_shp_ffn)
+
+
+
+```
+
+# Intersect LCDB with the Masked DEM Layer 
+
+```{r}
+
+library(tidyverse)
+library(sf)
+library(mapview)
+library(terra)
+
+source("D:/HerronK/ELF_Project/AndrewsWork/MyCode/R/ea_utils.R")
+
+LCDB5_ffn = "D:/HerronK/ELF_Project/ELFData/LCDB/lcdb-v50-land-cover-database-version-50-mainland-new-zealand.gpkg"
+file.exists(LCDB5_ffn)
+
+# dem_dn = "D:/HerronK/ELF_Project/ELFData/NZ_DEM/"
+# dem_fn = "dem_linz_nz_110520_orthonzgd49h_nztm_10m.kea"
+# dem_ffn = paste0(dem_dn, dem_fn)
+# dem = rast(dem_ffn)
+# plot(dem)
+# class(dem)
+
+root1 = "D:/HerronK/ELF_Project/AndrewsWork/"
+DEM_masked = st_read(paste0(root1, "DEM_MASKED_POLY.json"))
+
+mapview(DEM_masked)
+
+
+# A = st_intersection("")
+
+DIROUT = "D:/HerronK/ELF_Project/AndrewsWork/"
+
+DEM_maskedxLCDB = ea_intersection(LCDB5, DEM_masked, PC = "PNGeo04-W10", "Stub_", dn = DIROUT, val = "none", parallel = T, ncore = 7, filetype = "GPKG", diff_opt = F, simplify_opt = F, tol = NULL)
+
+
+
+treeline_classes_init = c(14,15,16,43,55)
+treeline_init = LCDB5 %>% filter(Class_2018 %in% treeline_classes_init)
+
+mapview(treeline_init)
+
+CLT
+
+```
+
+# Make a shape file of all the available LIDAR tiles
+
+```{r}
+
+dn = "D:/HerronK/ELF_Project/AndrewsWork/Lidar-Index-Tiles-LINZ/"
+
+
+lidar_tiles_dn = list.dirs(dn, recursive = F)
+
+for (i in 1:length(lidar_tiles_dn)){
+  
+  # i = 2
+  
+  cdir = lidar_tiles_dn[i]
+  fls = list.files(cdir, full.names = T)
+  
+  
+  ix = which(str_detect(fls, ".shp"))
+  cfile = fls[ix]
+  
+  SF = st_read(cfile)
+  
+  name_tileset = str_extract(basename(cfile),  ".+?(?=-lidar)")
+  print("************************************************************************************")
+  print(paste("No.", i, name_tileset))
+  print("************************************************************************************")
+  print(paste("No.", i, name_tileset))
+  SF_w_name = SF %>% mutate(name = name_tileset)
+  if (i==1){
+    SF_COL = SF_w_name
+  }else{
+    
+    SF_COL = SF_COL %>% bind_rows(SF_w_name)
+  }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+}
+
+
+NZ_LINZ_LIDAR_INDEX_TILES_ffn = paste0(dn, "All_LINZ_LiDAR_Index_Tiles.shp")
+st_write(SF_COL, NZ_LINZ_LIDAR_INDEX_TILES_ffn, append = F)
+
+
+
+```
+
+# Dissolve internal lines in LIDAR INDEX TILES just to get outline
+
+```{r}
+
+NZ_LINZ_LIDAR_INDEX_TILES_ffn = paste0(dn, "All_LINZ_LiDAR_Index_Tiles.shp")
+LIT = st_read(NZ_LINZ_LIDAR_INDEX_TILES_ffn)
+
+LIT_sel = LIT %>% filter(name=="otago")
+
+mapview(LIT_sel)
+
+
+```
+
