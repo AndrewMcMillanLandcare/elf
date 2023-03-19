@@ -26,12 +26,18 @@ library(sf)
 library(mapview)
 library(terra)
 library(tictoc)
-source("D:/HerronK/ELF_Project/AndrewsWork/MyCode/R/ea_utils.R")
+source("D:/HerronK/ELF_Project/AndrewsWork/MyCode/R/elf/ea_utils.R")
 
 #set up the data folders
 rdn = "D:/HerronK/ELF_Project/"
 CLTL_rdn = paste0(rdn, "ELFData/Cieraad/")
 AL_dn = paste0(rdn,"AndrewsWork/layers/")
+NTL_dn = paste0(AL_dn,"New-Treeline-Layers/")
+
+
+TL_classes_unfilt = c(14,15,16,43,55)
+
+
 ```
 
 
@@ -43,9 +49,9 @@ AL_dn = paste0(rdn,"AndrewsWork/layers/")
 ```
 
 
-# get the CLTL
+# Step 1. get the CLTL
 
-```{r}
+```{r Step 1}
 
 #set up the data folders
 rdn = "D:/HerronK/ELF_Project/"
@@ -91,7 +97,7 @@ st_read(CLTL_adj_ffn)
 
 
 
-# Now intersect the CLTL_adj with LCDB
+#  Step 2. Now intersect the CLTL_adj with LCDB
 
 ```{r}
 
@@ -111,13 +117,12 @@ st_write(LCDBxCLTL_adj, LCDBxCLTL_adj_ffn, append = F)
 
 ```
 
-# Get diff between clipped features and LCDB features that intersect with CLTL
+#  Step 3. Get diff between clipped features and LCDB features that intersect with CLTL
 
 ```{r}
 
 
 #Define the full set of treeline classes
-TL_classes_unfilt = c(14,15,16,43,55)
 
 
 
@@ -129,7 +134,7 @@ if (!exists("LCDBxCLTL_adj")){
 if (!exists("LCDB5")){
   LCDB5_ffn = "D:/HerronK/ELF_Project/ELFData/LCDB/lcdb-v50-land-cover-database-version-50-mainland-new-zealand.gpkg"
   LCDB5 = st_read(LCDB5_ffn)
-
+  
 }
 
 # get the LCDB features that intersect with the CTLT
@@ -163,7 +168,7 @@ st_write(LCDB5_intersecting_feat_minus_LCDBxCLTL_adj, LCDB5_intersecting_feat_mi
 
 ```
 
-# set DEM zonal stats of treeline layer
+#  Step 4. extract DEM zonal stats from outside treeline class polys
 
 ```{r}
 
@@ -206,12 +211,14 @@ names(outside_polys_w_ZSTATS)
 outside_polys_w_ZSTATS_ffn = paste0(AL_dn, "outside_polys_w_ZSTATS.gpkg")
 st_write(outside_polys_w_ZSTATS, outside_polys_w_ZSTATS_ffn, append = F)
 
-names(LCDBxCLTL_adj_w_ZSTATS)
+names(outside_polys_w_ZSTATS)
 
 ```
 
 
-# Now apply the rules set out in Section 3.2ii of Caitlin's Report
+#  Step 5. Filter the outside_polys
+
+apply the rules set out in Section 3.2ii of Caitlin's Report
 
 ```{r}
 
@@ -252,7 +259,7 @@ FRAC_INSIDE_THRESH = 0.5
 
 #Apply the Filtering Logic on P3-4 of ETL report
 
-New_TL_unfilt_w_FLAGS = outside_polys_w_ZSTATS_mdf %>% 
+outside_polys_flagged = outside_polys_w_ZSTATS_mdf %>% 
   #flag the class 16 data that mostly lie outside CLTL
   mutate(
     TREELINE_CLASS_FLAG = ifelse(Class_2018 %in% TL_classes_unfilt, TRUE, FALSE),
@@ -263,7 +270,7 @@ New_TL_unfilt_w_FLAGS = outside_polys_w_ZSTATS_mdf %>%
       Class_2018 == 14 | Class_2018 == 15 ~ "KEEP",
       # Class 16 features mostly outside and original area is > 10 ha need to be checked
       (Class_2018 == 16) & (AREA_ha >= 10)  ~ "CHECK",
-      (Class_2018 == 16) & (ORIG_AREA_ha < 10)  ~ "KEEP",
+      (Class_2018 == 16) & (AREA_ha < 10)  ~ "KEEP",
       # (Class_2018 != 16) & (FRAC_INSIDE >= FRAC_INSIDE_THRESH) ~ "N/A",
       # Class 43 and 55
       (Class_2018 == 43 | Class_2018 == 55) & (Island == "NI") & (min_alt > 900 | mean_alt > 1200) ~ "KEEP",
@@ -273,9 +280,98 @@ New_TL_unfilt_w_FLAGS = outside_polys_w_ZSTATS_mdf %>%
       (Class_2018 == 43 | Class_2018 == 55) & (Island == "SI") &  (mean_alt <= 1200 | min_alt <= 400) ~ "CHECK",
       (Class_2018 == 43 | Class_2018 == 55) & (Island == "SI") &  (mean_alt < 1300 & (!(mean_alt > 1200 & min_alt > 400))) ~ "CHECK"))
 
-New_TL_unfilt_w_FLAGS_ffn = paste0(AL_dn,"New-Treeline-Layers/New_TL_unfilt_w_FLAGS.gpkg")
-st_write(New_TL_unfilt_w_FLAGS, New_TL_unfilt_w_FLAGS_ffn, append = F)
+outside_polys_flagged_ffn = paste0(AL_dn,"New-Treeline-Layers/outside_polys_flagged.gpkg")
+st_write(outside_polys_flagged, outside_polys_flagged_ffn, append = F)
 
+
+#How many require checking?
+
+outside_polys_flagged %>% nrow() #17408
+outside_polys_flagged %>% filter(KEEP_FLAG == "KEEP") %>% nrow() #6722
+outside_polys_flagged %>% filter(KEEP_FLAG == "CHECK") %>% nrow() #10686
+outside_polys_flagged %>% filter(KEEP_FLAG == "CHECK" | KEEP_FLAG == "KEEP") %>% nrow() #17408
+outside_polys_flagged %>% filter(KEEP_FLAG == "REJECT") %>% nrow()  # 0
+
+
+#of the checked polys what are the classes
+
+outside_polys_flagged %>% 
+  st_set_geometry(NULL) %>% 
+  as_tibble() %>% 
+  filter(KEEP_FLAG == "CHECK") %>% 
+  group_by(Class_2018) %>% 
+  summarise(
+    Num = length(Class_2018),
+    Area_avg = mean(AREA_ha),
+    mean_alt_avg = mean(mean_alt),
+    mean_alt_sd = sd(mean_alt),
+    mean_alt_ln = length(mean_alt),
+    mean_alt_min = min(mean_alt),
+    mean_alt_max = max(mean_alt),
+    mean_alt_med = median(mean_alt))
+
+
+
+
+```
+
+#  Step 6. Grab the Clipped Layer and then combine it with the filtered outsidepolys
+
+
+```{r}
+
+outside_polys_flagged_ffn = paste0(AL_dn,"New-Treeline-Layers/outside_polys_flagged.gpkg")
+outside_polys_flagged = st_read(outside_polys_flagged_ffn)
+
+LCDBxCLTL_adj_ffn = paste0(AL_dn, "LCDBxCLTL_adj.gpkg")
+LCDBxCLTL_adj = st_read(LCDBxCLTL_adj_ffn)  
+
+#Temporary - for now - keep only those flagged with keep
+
+outside_polys_filtered = outside_polys_flagged %>% 
+  filter(KEEP_FLAG == "KEEP")
+
+# outside_polys_filtered_buff = st_buffer(outside_polys_filtered, 10)
+outside_polys_filtered_UNN = outside_polys_filtered %>% 
+  validate_sh() %>% 
+  group_by(LCDB_UID) %>% 
+  st_union(by_feature = T)
+
+inside_polys_filtered_UNN = LCDBxCLTL_adj %>% 
+  filter(Class_2018 %in% TL_classes_unfilt) %>% 
+  validate_sh() %>% 
+  group_by(LCDB_UID) %>% 
+  st_union(by_feature = T)
+
+
+all_polys_filtered_UNN = st_union(outside_polys_filtered_UNN, inside_polys_filtered_UNN, by_feature = T)
+
+
+LCDBxCLTL_adj %>% pull(Class_2018) %>% unique()
+
+outside_polys_filtered_UNN_ffn = paste0(NTL_dn, "outside_polys_filtered_UNN.gpkg")
+st_write(outside_polys_filtered_UNN, outside_polys_filtered_UNN_ffn, append = F)
+
+
+mapview(outside_polys_filtered_CMB)
+
+outside_polys_filtered_UNN = st_union(validate_sh(outside_polys_filtered))
+
+outside_polys_filtered_UNN_ffn = paste0(NTL_dn, "outside_polys_filtered_UNN.gpkg")
+st_write(outside_polys_filtered_UNN, outside_polys_filtered_UNN_ffn, append = F)
+
+mapview(outside_polys_filtered_UNN)
+
+LCDBxCLTL_adj_CMB = st_combine(LCDBxCLTL_adj)
+
+
+ATL_POLYS = LCDBxCLTL_adj %>% 
+  st_combine(outside_polys_filtered)
+  
+
+```
+
+```{r}
 # New_TL_unfilt_w_FLAGS_ffn2 = paste0(AL_dn,"New-Treeline-Layers/New_TL_unfilt_w_FLAGS.shp")
 # st_write(New_TL_unfilt_w_FLAGS, New_TL_unfilt_w_FLAGS_ffn2)
 
