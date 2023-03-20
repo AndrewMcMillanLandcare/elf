@@ -3420,7 +3420,7 @@ create_parallel_lines = function(LL = c(1000000, 4700000), UR = c(2100000, 62000
     st_cast("LINESTRING")
   
 
-  CL = st_read("D:/HerronK/ELF_Project/AndrewsWork/Layers/NZ_Coastline_properpolygon.shp") %>%   st_transform(crs = st_crs(pts_sf))
+  CL = st_read("D:/HerronK/ELF_Project/AndrewsWork/Layers/NZ_Coastline_properpolygon.shp") %>%   st_transform(crs = st_crs(hLines))
   # D:\HerronK\ELF_Project\AndrewsWork\layers
   hLinesNZ = st_intersection(hLines, CL)
   
@@ -3430,5 +3430,64 @@ create_parallel_lines = function(LL = c(1000000, 4700000), UR = c(2100000, 62000
 }
 
 
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+### st_parallel - parallises a given st function
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+st_parallel = function(sf_df, sf_func, n_cores = NULL, ...){
+  
+  n_cores_det <- detectCores(logical = TRUE) # returns the number of available hardware threads, and if it is FALSE, returns the number of physical cores
+  n_cores_to_use <- n_cores_det - 1
+  
+  cluster1 <- makeCluster(n_cores_to_use)
+  
+  print(paste("Parallel Processing: created a cluster of ", n_cores_to_use, "cores"))
+  
+  
+  # register the  cluster
+  registerDoParallel(cluster1)
+  
+  # split the data
+  split_vector <- rep(1:n_cores_to_use, each = nrow(P1) / n_cores_to_use, length.out = nrow(P1))
+  split_input <- split(P1, split_vector)
+  
+  
+  
+  
+  
+  # export the data to the cluster
+  print(paste("Parallel Processing: exporting data to cluster"))
+  clusterExport(cluster1, list("P1"), envir = environment())
+  
+  print(paste("Parallel Processing: doing analysis"))
+  split_results <- c(parLapply(cluster1, split_input, sf_func))
+  
+  output_class <- class(split_results[[1]])
+  if (length(output_class) == 2) {
+    output_class <- output_class[2]
+  }
+  
+  print(paste("...finished Parallel Processing: recombining results"))
+  
+  # Combine results back together. Method of combining depends on the output from the function.
+  if (output_class == "matrix") {
+    P1_RESULT <- do.call("rbind", split_results)
+    names(P1_RESULT) <- NULL
+  } else if (output_class == "sfc") {
+    P1_RESULT <- do.call("c", split_results)
+    P1_RESULT <- sf_func(P1_RESULT) # do.call combines the list but there are still n_cores of the geometry which had been split up. Running st_union or st_collect gathers them up into one, as is the expected output of these two functions.
+  } else if (output_class %in% c("list", "sgbp")) {
+    P1_RESULT <- do.call("c", split_results)
+    names(P1_RESULT) <- NULL
+  } else if (output_class == "data.frame") {
+    P1_RESULT <- do.call("rbind", split_results)
+  } else {
+    stop("Unknown class. st_parallel only accepts the following outputs at present: sfc, list, sf, matrix, sgbp.")
+  }
+  
+  return(P1_RESULT)
+  
+}
 
 

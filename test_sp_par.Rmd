@@ -10,11 +10,252 @@ This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
 
 ```{r}
-plot(cars)
+
+library(parallel)
+library(doParallel)
+
+ea_sp_par <- function(P1, fcn, ffn_stub, dn, val = "none", parallel = T, ncore = 15, filetype = "GPKG", simplify_opt = F, tol = NULL) {
+  print(paste("#####################################################################"))
+  print(paste("#############            Starting spatial transform              ########"))
+  print(paste("#####################################################################"))
+  
+  
+  tic()
+  
+  if (!dir.exists(dn)) {
+    dir.create(dn, recursive = T)
+  }
+  
+  
+  
+  print(paste("#####################################################################"))
+  
+  
+  
+  if (simplify_opt) {
+    if (is.null(tol)) {
+      tol <- 20
+    }
+    
+    P1 <- st_simplify(P1, preserveTopology = F, tol)
+    P2 <- st_simplify(P2, preserveTopology = F, tol)
+  }
+  
+  
+  if (val){
+    print("validating input layer")
+    P1 <- validate_sh(P1)
+  }
+  
+  
+  
+  
+  
+  if ("fid" %in% names(P1)) {
+    P1 <- P1 %>% dplyr::select(-fid)
+  }
+  if ("fid" %in% names(P2)) {
+    P2 <- P2 %>% dplyr::select(-fid)
+  }
+  
+  if ("fid" %in% names(P1)) {
+    P1 <- P1 %>% dplyr::select(-fid)
+  }
+  if ("fid" %in% names(P2)) {
+    P2 <- P2 %>% dplyr::select(-fid)
+  }
+  
+  
+  
+  if (parallel) {
+    
+    
+    
+    # make the  cluster
+    n_cores_det <- detectCores(logical = TRUE) # returns the number of available hardware threads, and if it is FALSE, returns the number of physical cores
+    n_cores_to_use <- n_cores_det - 1
+    cluster1 <- makeCluster(n_cores_to_use)
+    
+    print(paste("Parallel Processing: created a cluster of ", n_cores_to_use, "cores"))
+    
+    
+    # register the  cluster
+    registerDoParallel(cluster1)
+    
+    # split the data
+    split_vector <- rep(1:n_cores_to_use, each = nrow(P1) / n_cores_to_use, length.out = nrow(P1))
+    split_input <- split(P1, split_vector)
+    
+    print(paste("Parallel Processing: exporting data to cluster"))
+    
+    
+    # export the data to the cluster
+    clusterExport(cluster1, list("P1", "P2"), envir = environment())
+    
+    
+    
+    
+    
+    
+    print(paste("Parallel Processing: exporting data to cluster"))
+    
+    
+    print(paste("Parallel Processing: starting multicore work"))
+    # execute the command
+    system.time(
+      if (!diff_opt) {
+        split_results <- c(parLapply(cluster1, split_input, st_intersection, P2))
+      } else {
+        split_results <- c(parLapply(cluster1, split_input, st_difference, P2))
+      }
+    )
+    print(paste("Parallel Processing: finished multicore work"))
+    
+    # Define the output_class. If length is greater than two, then grab the second variable.
+    output_class <- class(split_results[[1]])
+    if (length(output_class) == 2) {
+      output_class <- output_class[2]
+    }
+    
+    print(paste("...finished Parallel Processing: recombining results"))
+    
+    # Combine results back together. Method of combining depends on the output from the function.
+    if (output_class == "matrix") {
+      P1xP2 <- do.call("rbind", split_results)
+      names(P1xP2) <- NULL
+    } else if (output_class == "sfc") {
+      P1xP2 <- do.call("c", split_results)
+      P1xP2 <- sf_func(P1xP2) # do.call combines the list but there are still n_cores of the geometry which had been split up. Running st_union or st_collect gathers them up into one, as is the expected output of these two functions.
+    } else if (output_class %in% c("list", "sgbp")) {
+      P1xP2 <- do.call("c", split_results)
+      names(P1xP2) <- NULL
+    } else if (output_class == "data.frame") {
+      P1xP2 <- do.call("rbind", split_results)
+    } else {
+      stop("Unknown class. st_parallel only accepts the following outputs at present: sfc, list, sf, matrix, sgbp.")
+    }
+  } else if (parallel & PC == "EANZ-DT01-Linux") {
+    P1xP2 <- st_parallel(P1, st_intersection, 15, P2)
+  } else if (!parallel) {
+    P1xP2 <- st_intersection(P1, P2)
+  }
+  
+  # if  (PC == "EANZ-DT01"){
+  #
+  #   x = mapview(P1xP2)
+  #   mapshot(x, url = paste0( dn,ffn_stub, ".html"))
+  # }
+  
+  if ("fid" %in% names(P1xP2)) {
+    P1xP2 <- P1xP2 %>% dplyr::select(-fid)
+  }
+  
+  split_results <- c(parLapply(cluster1, split_input, st_difference, P2))
+  
+  # shp_ffout = paste0( paste0(dn,ffn_stub, ".gpkg"))
+  
+  if (filetype == "GPKG") {
+    shp_ffout <- paste0(paste0(dn, ffn_stub, ".gpkg"))
+  } else {
+    shp_ffout <- paste0(paste0(dn, ffn_stub, ".shp"))
+  }
+  
+  P1xP2 <- P1xP2 %>%
+    st_collection_extract("POLYGON") %>%
+    validate_sh()
+  
+  print(paste0("Writing the newly generated shape file to", shp_ffout))
+  st_write(P1xP2, shp_ffout, append = F)
+  
+  print(paste0("...finished luca_intersection..."))
+  print(paste0("................................"))
+  
+  toc()
+  
+  # close the cluster
+  stopCluster(cluster1)
+  
+  
+  print(paste("#####################################################################"))
+  print(paste("#############            Finished interesection              ########"))
+  print(paste("#####################################################################"))
+  
+  
+  
+  return(P1xP2)
+}
+
+
+
+
+
+
+
 ```
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+```{r}
+library(tidyverse)
+library(sf)
+library(parallel)
+library(doParallel)
 
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
 
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+#set up the data folders
+rdn = "D:/HerronK/ELF_Project/"
+CLTL_rdn = paste0(rdn, "ELFData/Cieraad/")
+AL_dn = paste0(rdn,"AndrewsWork/layers/")
+NTL_dn = paste0(AL_dn,"New-Treeline-Layers/")
+
+
+all_polys_filtered_mdf_ffn = paste0(NTL_dn, "all_polys_filtered_mdf.gpkg")
+all_polys_filtered_mdf = st_read(all_polys_filtered_mdf_ffn)
+P1 = all_polys_filtered_mdf
+
+RESULT_CMB = st_parallel(P1, st_combine)
+RESULT_UNN = st_parallel(P1, st_union)
+
+RESULT_CMB_ffn = paste0(NTL_dn, "RESULT_CMB.gpkg")
+st_write(RESULT_CMB, RESULT_CMB_ffn, append = F)
+
+
+RESULT_UNN_ffn = paste0(NTL_dn, "RESULT_UNN.gpkg")
+st_write(RESULT_UNN, RESULT_UNN_ffn, append = F)
+
+
+RESULT_lines = RESULT_UNN %>% st_cast("POLYGON") %>% st_cast("MULTILINESTRING")
+
+RESULT_lines_ffn = paste0(NTL_dn, "RESULT_lines.gpkg")
+st_write(RESULT_lines, RESULT_lines_ffn, append = F)
+
+```
+
+
+```{r}
+
+PL = create_parallel_lines(LL = c(1000000, 4700000), UR = c(2100000, 6200000), x_interv = 2e4, y_interv=2e4, direction = "H")
+
+mapview(PL)
+
+samp_points = st_intersection(RESULT_lines, PL)
+
+A = mapview(RESULT_lines, color="green")
+B = mapview(PL, coloor="blue")
+C = mapview(samp_points, color = "red")
+
+
+
+
+A + B + C
+
+PL_ffn = paste0(NTL_dn, "PL.gpkg")
+st_write(PL, PL_ffn, append = F)
+
+samp_points_ffn = paste0(NTL_dn, "samp_points.gpkg")
+st_write(samp_points, samp_points_ffn, append = F)
+
+
+
+```
+
+
+
