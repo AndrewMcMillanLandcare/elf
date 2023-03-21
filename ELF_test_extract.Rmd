@@ -42,6 +42,57 @@ TL_classes_unfilt = c(14,15,16,43,55)
 ```
 
 
+# Function: create_rect 
+
+```{r}
+
+create_rect = function(SP, len, wid, PHI){
+  
+  x1 = SP[1]
+  y1 = SP[2]
+  
+  
+  x2 = x1 + len * cos(PHI)
+  y2 = y1 + len * sin(PHI)
+  
+  dx = x2 - x1
+  dy = y2 - y1
+  
+  r = sqrt(dx**2 + dy**2)
+  p = atan2(dy, dx)
+  
+  
+  v1_x = x1 + (0.5*wid) * cos(p - pi/2) 
+  v2_x = x1 + (0.5*wid) * cos(p + pi/2) 
+  v3_x = x2 + (0.5*wid) * cos(p - pi/2) 
+  v4_x = x2 + (0.5*wid) * cos(p + pi/2) 
+  
+  v1_y = (y1 + (0.5*wid) * sin(p - pi/2))*-1 
+  v2_y = (y1 + (0.5*wid) * sin(p + pi/2))*-1
+  v3_y = (y2 + (0.5*wid) * sin(p - pi/2))*-1
+  v4_y = (y2 + (0.5*wid) * sin(p + pi/2))*-1
+  
+  
+  points_x = c(v1_x, v2_x, v4_x, v3_x, v1_x)
+  points_y = -1*(c(v1_y, v2_y, v4_y, v3_y, v1_y))
+  
+  rect = data.frame(X =points_x , Y = points_y) %>% 
+    sf::st_as_sf(coords = c("X","Y")) %>% 
+    sf::st_set_crs(2193) %>% 
+    summarise(geometry = st_combine(geometry)) %>%
+    st_cast("POLYGON")
+  
+  
+  MV = mapview(rect)
+  
+  OUT = list(rect, MV, points_x, points_y)
+  
+  
+}
+
+```
+
+
 
 ```{r}
 
@@ -455,31 +506,20 @@ A + B + C
 PL_ffn = paste0(NTL_dn, "PL.gpkg")
 st_write(PL, PL_ffn, append = F)
 
-samp_points_ffn = paste0(NTL_dn, "samp_points.gpkg")
-st_write(samp_points, samp_points_ffn, append = F)
+samp_points_ffn = paste0(NTL_dn, "samp_points.shp")
+st_write(samp_points %>% st_cast("MULTIPOINT"), samp_points_ffn, append = F)
 
+# samp_points_ffn = paste0(NTL_dn, "samp_points.gpkg")
+# st_write(samp_points, samp_points_ffn, append = F)
 ```
 
-
+# Step 8 OLD. Take a point and make a sampling rectange 
 
 ```{r}
-library(tidyverse)
-library(sf)
-library(mapview)
-library(terra)
-
-# Y = 5663013
-# X = 1855503
-
-
-
 Y = 5477617
 X = 1798886
 
-
-
 df = data.frame(X,Y)
-
 d_sf = st_as_sf(df, coords = c("X","Y"),crs = 2193)
 
 mapview(d_sf)
@@ -488,9 +528,258 @@ mapview(d_sf)
 
 SP = st_coordinates(d_sf)
 
+LEN = 500
+WID = 20
+PHI = 60 * pi/180
+
+RECT = create_rect(SP, LEN, WID, PHI)
+
+RECT_shp = RECT[[1]]
+
+```
+
+
+# Step 8. Take a point and make sampling rectangles of all different angles. Find which angle is the steepest
+
+```{r}
+Y = 5477617
+X = 1798886
+
+df = data.frame(X,Y)
+d_sf = st_as_sf(df, coords = c("X","Y"),crs = 2193)
+
+mapview(d_sf)
+
+# extract_coords back out of sf
+
+SP = st_coordinates(d_sf)
+
+LEN = 500
+WID = 20
+
+DIV_deg = 30
+PHI_deg_seq = seq(DIV_deg,360,DIV_deg)
+
+tb = data.frame(PHI_deg = PHI_deg_seq ) %>% 
+  mutate(
+    PHI = PHI_deg * pi/180,
+    SLOPE_m = NA,
+    SLOPE_c = NA,
+    SLOPE_r2 = NA,
+  )
+
+
+for (iPHI in 1:length(PHI_deg_seq)){
+  
+  # iPHI=7
+  
+  print(paste("Processing angle", iPHI,"of",length(PHI_deg_seq) ))
+  
+  c_PHI_deg = PHI_deg_seq[iPHI]
+  PHI = c_PHI_deg * pi/180
+  
+  RECT = create_rect(SP, LEN, WID, PHI)
+  RECT_shp = RECT[[1]]
+  DTM_cropped = crop(DTM, extent(RECT_shp))
+  DTM_cropped_masked = mask(DTM_cropped, RECT_shp)
+  ZVALS = DTM_cropped_masked@data@values
+  ncells = DTM_cropped_masked@ncols*DTM_cropped_masked@nrows
+  CELLS = 1:ncells
+  
+  XY = t(sapply(CELLS, function(x) {xyFromCell(DTM_cropped_masked,x)} )) %>% 
+    as.data.frame() %>% 
+    as_tibble() %>% 
+    mutate(Z = ZVALS)
+  
+  names(XY) <- c("X","Y","Z")
+  
+  X_cent = SP[1]
+  Y_cent = SP[2]
+  
+  
+  XY_dist = XY %>% 
+    mutate(
+      DX = X - X_cent,
+      DY = Y - Y_cent,
+      R = sqrt(DX^2+DY^2))
+  
+  SLOPE_REG_STATS = summary(lm(Z ~ R, data = XY_dist))
+  SLOPE_REG_ICP = SLOPE_REG_STATS$coefficients[1]
+  SLOPE_REG_SLP = SLOPE_REG_STATS$coefficients[2]
+  SLOPE_REG_RSQ = SLOPE_REG_STATS$r.squared
+  
+  tb$SLOPE_m[iPHI] = SLOPE_REG_SLP
+  tb$SLOPE_c[iPHI] = SLOPE_REG_ICP
+  tb$SLOPE_r2[iPHI] = SLOPE_REG_RSQ
+  
+  
+}
+
+#find angle of the most negative slope
+PHI_STEEPEST = tb$PHI[which.min(tb$SLOPE_m)]
 
 
 
+```
+
+
+#step 9 . Use rectangle to sample lidar DEM data
+
+```{r}
+
+RECT = create_rect(SP, 500, 50, PHI_STEEPEST)
+RECT_shp = RECT[[1]]
+
+DTM = raster(lidar_dtm_ffn) 
+DTM_cropped = crop(DTM, extent(RECT_shp))
+DTM_cropped_masked = mask(DTM_cropped, RECT_shp)
+
+CHM = raster(lidar_chm_ffn) 
+CHM_cropped = crop(CHM, extent(RECT_shp))
+CHM_cropped_masked = mask(CHM_cropped, RECT_shp)
+
+mapview(CHM_cropped_masked)
+
+
+
+
+DTM = raster(lidar_dtm_ffn) 
+DTM_cropped = crop(DTM, extent(RECT_shp))
+DTM_cropped_masked = mask(DTM_cropped, RECT_shp)
+
+DTM = raster(lidar_dtm_ffn) 
+DTM_cropped = crop(DTM, extent(RECT_shp))
+DTM_cropped_masked = mask(DTM_cropped, RECT_shp)
+
+
+
+
+
+```
+
+
+
+```{r}
+plot(DTM_cropped_masked)
+plot(DTM_cropped)
+DTM_cropped_masked@data@values
+
+
+```
+
+Function: flatten_rast 
+
+```{r}
+
+
+flatten_rast = function(RAST, PHI, XY_ORIG){
+  
+  RAST = DTM_cropped_masked
+  ZVALS = DTM_cropped_masked@data@values
+  
+  ncells = RAST@ncols*DTM_cropped_masked@nrows
+  CELLS = 1:ncells
+  
+  XY = t(sapply(CELLS, function(x) {xyFromCell(DTM_cropped_masked,x)} )) %>% 
+    as.data.frame() %>% 
+    as_tibble() %>% 
+    mutate(Z = ZVALS)
+  
+  names(XY) = c("X", "Y","Z")
+  
+  X_cent = XY_ORIG[1]
+  Y_cent = XY_ORIG[2]
+  
+  XY_flat = XY %>% 
+    mutate(
+      DX = X - X_cent,
+      DY = Y - Y_cent,
+      R = sqrt(DX^2+DY^2),
+      OMEGA = atan2(DX,DY),
+      OMEGA_ADJ = OMEGA+PHI+pi/2,
+      RX = R * cos(OMEGA_ADJ)+ median(X),
+      RY = R * sin(OMEGA_ADJ)+ median(Y),
+      XNEW = round(RX),
+      YNEW = round(RY))
+  
+  XYZ_flat = XY_flat %>% 
+    dplyr::select(X = XNEW, Y = YNEW, Z = Z) %>% 
+    filter(!is.na(Z))
+  
+  r_flat = rasterFromXYZ(XYZ_flat, crs = 2193)
+  
+}
+
+
+
+```
+
+# Step 10. Flatten the sampled raster so that it can be sampled
+
+```{r}
+
+
+mapview(DTM_cropped_masked)
+
+
+ZVALS = DTM_cropped_masked@data@values
+# ncells = DTM_cropped_masked@ncols*DTM_cropped_masked@nrows
+# CELLS = 1:ncells
+
+XY = t(sapply(CELLS, function(x) {xyFromCell(DTM_cropped_masked,x)} )) %>% 
+  as.data.frame() %>% 
+  as_tibble() %>% 
+  mutate(Z = ZVALS)
+
+names(XY) = c("X", "Y","Z")
+
+
+X_cent = median(XY$X)
+Y_cent = median(XY$Y)
+
+X_cent = x1
+Y_cent = y1
+
+
+XY_flat = XY %>% 
+  mutate(
+    DX = X - X_cent,
+    DY = Y - Y_cent,
+    R = sqrt(DX^2+DY^2),
+    OMEGA = atan2(DX,DY),
+    OMEGA_ADJ = OMEGA+PHI+pi/2,
+    
+    RX = R * cos(OMEGA_ADJ)+ median(X),
+    RY = R * sin(OMEGA_ADJ)+ median(Y),
+    XNEW = round(RX),
+    YNEW = round(RY))
+
+
+# calculate a regression between Z and R (the distance from point 1)
+
+SLOPE_REG_STATS = summary(lm(Z ~ R, data = XY_flat))
+SLOPE_REG_ICP = SLOPE_REG_STATS$coefficients[2]
+SLOPE_REG_SLP = SLOPE_REG_STATS$coefficients[1]
+SLOPE_REG_RSQ = SLOPE_REG_STATS$r.squared
+
+XYZ_flat = XY_flat %>% 
+  dplyr::select(X = XNEW, Y = YNEW, Z = Z) %>% 
+  filter(!is.na(Z))
+
+r_flat = rasterFromXYZ(XYZ_flat, crs = 2193)
+mapview(r_flat)
+
+
+data = r_flat@data@values %>% matrix(nrow=r_flat@nrows)
+dim(data)
+
+class(data)
+
+```
+
+
+
+```{r}
 #create a circle of x m around point
 
 RAD = 500
@@ -577,54 +866,21 @@ mapview(ASPECT)
 toc()
 
 ntints = 36
-ints = seq(-pi, +pi, (2 * pi)/(36-1))
+ints = seq(-pi, +pi, (2 * pi)/(36))
 
 len = 500
-wid = 10
+wid = 20
 
 # for (p in ints){
 
 
-PHI = ints[11]
+PHI = ints[19]
 
 rot_angle = 180/pi*PHI
+```
 
 
-x1 = SP[1]
-y1 = SP[2]
-
-
-x2 = x1 + len * cos(PHI)
-y2 = y1 + len * sin(PHI)
-
-dx = x2 - x1
-dy = y2 - y1
-
-r = sqrt(dx**2 + dy**2)
-p = atan2(dy, dx)
-
-
-v1_x = x1 + (0.5*wid) * cos(p - pi/2) 
-v2_x = x1 + (0.5*wid) * cos(p + pi/2) 
-v3_x = x2 + (0.5*wid) * cos(p - pi/2) 
-v4_x = x2 + (0.5*wid) * cos(p + pi/2) 
-
-v1_y = (y1 + (0.5*wid) * sin(p - pi/2))*-1 
-v2_y = (y1 + (0.5*wid) * sin(p + pi/2))*-1
-v3_y = (y2 + (0.5*wid) * sin(p - pi/2))*-1
-v4_y = (y2 + (0.5*wid) * sin(p + pi/2))*-1
-
-rect = data.frame(X = c(v1_x, v2_x, v4_x, v3_x, v1_x), Y = -1*(c(v1_y, v2_y, v4_y, v3_y, v1_y))) %>% 
-  sf::st_as_sf(coords = c("X","Y")) %>% 
-  sf::st_set_crs(2193) %>% 
-  summarise(geometry = st_combine(geometry)) %>%
-  st_cast("POLYGON")
-
-
-MV = MV + rect
-MV
-
-
+```{r}
 # extract the DEM and work out slope
 
 # +proj=tpeqd +lat_1=0 +lon_1=0 +lat_2=60 +lon_2=60 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs
@@ -638,37 +894,43 @@ r3 = mask(r2, rect)
 
 plot(r3)
 plot(r2)
-
-DTM_STRS = st_as_stars(DTM_cropped)
-
-DTM_cropped_clip = DTM_STRS[rect]
+r3@data@values
 
 
-DTM_STRS = st_transform_proj(DTM_STRS, 2193)
-st_crs(DTM_STRS)
 
-DTM_cropped_clip = DTM_STRS[rect]
+# 
+# 
+# DTM_STRS = st_as_stars(DTM_cropped)
+# 
+# DTM_cropped_clip = DTM_STRS[rect]
+# 
+# 
+# DTM_STRS = st_transform_proj(DTM_STRS, 2193)
+# st_crs(DTM_STRS)
+# 
+# DTM_cropped_clip = DTM_STRS[rect]
+# 
+# plot(DTM_cropped_clip)
+# 
+# extent(rect)
+# st_crs(rect)
+# 
+# st_dimensions(DTM_STRS)
+# st_crs(DTM_STRS)
+# st_coordinates(DTM_STRS)
+# 
+# str(DTM_cropped_clip)
+# 
+# 
+# MV = MV + mapview(DTM_cropped_clip)
+# MV 
 
-plot(DTM_cropped_clip)
+DTM_cropped_clip = r3
 
-extent(rect)
-st_crs(rect)
-
-st_dimensions(DTM_STRS)
-st_crs(DTM_STRS)
-st_coordinates(DTM_STRS)
-
-str(DTM_cropped_clip)
-
-
-MV = MV + mapview(DTM_cropped_clip)
-MV 
-
+mapview(DTM_cropped_clip)
 
 ZVALS = DTM_cropped_clip@data@values
-
 ncells = DTM_cropped_clip@ncols*DTM_cropped_clip@nrows
-
 CELLS = 1:ncells
 
 XY = t(sapply(CELLS, function(x) {xyFromCell(DTM_cropped_clip,x)} )) %>% 
@@ -679,18 +941,42 @@ XY = t(sapply(CELLS, function(x) {xyFromCell(DTM_cropped_clip,x)} )) %>%
 names(XY) = c("X", "Y","Z")
 
 
+X_cent = median(XY$X)
+Y_cent = median(XY$Y)
+
+X_cent = x2
+Y_cent = y2
+
 
 XY_flat = XY %>% 
   mutate(
-    X_flat = X-r*cos(PHI),
-    Y_flat = Y-r*sin(PHI))
+    DX = X - X_cent,
+    DY = Y - Y_cent,
+    R = sqrt(DX^2+DY^2),
+    OMEGA = atan2(DX,DY),
+    OMEGA_ADJ = OMEGA+PHI+pi/2,
+    
+    RX = R * cos(OMEGA_ADJ)+ median(X),
+    RY = R * sin(OMEGA_ADJ)+ median(Y),
+    XNEW = round(RX),
+    YNEW = round(RY))
 
-XYZ_flat = XY_flat %>% dplyr::select(X = X_flat, Y = Y_flat, Z = Z)
 
 
+
+
+XYZ_flat = XY_flat %>% dplyr::select(X = XNEW, Y = YNEW, Z = Z)
 r_flat = rasterFromXYZ(XYZ_flat, crs = 2193)
-
 mapview(r_flat)
+
+
+data = r_flat@data@values %>% matrix(nrow=r_flat@nrows)
+dim(data)
+
+
+XYZ_orig = XY_flat %>% dplyr::select(X = X, Y = Y, Z = Z)
+r_orig = rasterFromXYZ(XYZ_orig, crs = 2193)
+mapview(r_orig)
 
 raster::rotate(DTM_cropped_clip)
 
@@ -702,25 +988,25 @@ mapview(st_transform(rect, PRJ_STR))
 
 
 WKT2_tpeqd = PROJCS["World_Two_Point_Equidistant",
-    GEOGCS["WGS 84",
-        DATUM["WGS_1984",
-            SPHEROID["WGS 84",6378137,298.257223563,
-                AUTHORITY["EPSG","7030"]],
-            AUTHORITY["EPSG","6326"]],
-        PRIMEM["Greenwich",0],
-        UNIT["Degree",0.0174532925199433]],
-    PROJECTION["Two_Point_Equidistant"],
-    PARAMETER["Latitude_Of_1st_Point",0],
-    PARAMETER["Longitude_Of_1st_Point",0],
-    PARAMETER["Latitude_Of_2nd_Point",60],
-    PARAMETER["Longitude_Of_2nd_Point",60],
-    PARAMETER["false_easting",0],
-    PARAMETER["false_northing",0],
-    UNIT["metre",1,
-        AUTHORITY["EPSG","9001"]],
-    AXIS["Easting",EAST],
-    AXIS["Northing",NORTH],
-    AUTHORITY["ESRI","54031"]]
+                    GEOGCS["WGS 84",
+                           DATUM["WGS_1984",
+                                 SPHEROID["WGS 84",6378137,298.257223563,
+                                          AUTHORITY["EPSG","7030"]],
+                                 AUTHORITY["EPSG","6326"]],
+                           PRIMEM["Greenwich",0],
+                           UNIT["Degree",0.0174532925199433]],
+                    PROJECTION["Two_Point_Equidistant"],
+                    PARAMETER["Latitude_Of_1st_Point",0],
+                    PARAMETER["Longitude_Of_1st_Point",0],
+                    PARAMETER["Latitude_Of_2nd_Point",60],
+                    PARAMETER["Longitude_Of_2nd_Point",60],
+                    PARAMETER["false_easting",0],
+                    PARAMETER["false_northing",0],
+                    UNIT["metre",1,
+                         AUTHORITY["EPSG","9001"]],
+                    AXIS["Easting",EAST],
+                    AXIS["Northing",NORTH],
+                    AUTHORITY["ESRI","54031"]]
 
 
 MG = meshgrid(DTM_cropped_clip)
@@ -773,13 +1059,13 @@ RY = round(r * sin(omega_adj))
 
 RX = (RX - min(RX))
 RY = (RY - min(RY))
-    
-    
-    
-    
-    
-    
-PX = = mapview(DTM_cropped)
+
+
+
+
+
+
+PX = mapview(DTM_cropped)
 B = mapview(rect, alpha.region = 0)
 
 A + B
@@ -807,7 +1093,7 @@ persp(x1, y1, z, zlim=c(0,2), theta = 20, phi = 90,
       col = col.mat, scale=FALSE, border=NA, box=FALSE)
 png("SaveThisPlot.png")
 A = persp(x1, y1, z, zlim=c(0,2), theta = 20, phi = 90, 
-      col = col.mat, scale=FALSE, border=NA, box=FALSE)
+          col = col.mat, scale=FALSE, border=NA, box=FALSE)
 dev.off()
 
 
