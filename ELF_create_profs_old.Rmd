@@ -1,0 +1,141 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+library(tidyverse)
+library(sf)
+library(mapview)
+library(terra)
+
+Y = 5663013
+X = 1855503
+
+
+
+Y = 5477617
+X = 1798886
+
+
+
+df = data.frame(X,Y)
+
+d_sf = st_as_sf(df, coords = c("X","Y"),crs = 2193)
+
+mapview(d_sf)
+
+# extract_coords back out of sf
+
+SP = st_coordinates(d_sf)
+
+
+
+
+#create a circle of x m around point
+
+RAD = 500
+nincs = 50
+PHI = seq(-pi , pi, 2*pi/nincs)
+         
+circle_pts_x = RAD * cos(PHI)+SP[1]
+circle_pts_y = RAD * sin(PHI)+SP[2]
+
+CIRCLE = data.frame(X = circle_pts_x, Y = circle_pts_y)
+CIRCLE = bind_rows(CIRCLE, CIRCLE[1,])
+
+ggplot(CIRCLE, aes(X,Y)) + geom_point()
+
+CIRCLE_sf = st_as_sf(CIRCLE, coords = c("X","Y"),crs = 2193) %>% 
+  summarise(geometry = st_combine(geometry)) %>%
+  st_cast("POLYGON")
+
+
+
+bbox = as.data.frame(
+  t(
+    matrix(c(min(CIRCLE$X),min(CIRCLE$Y),
+                max(CIRCLE$X),min(CIRCLE$Y),
+                max(CIRCLE$X),max(CIRCLE$Y),
+                min(CIRCLE$X),max(CIRCLE$Y),
+                min(CIRCLE$X),min(CIRCLE$Y)), nrow=2) ) )
+              
+names(bbox) = c("X","Y")
+
+bbox_sf = st_as_sf(bbox, coords = c("X","Y"),crs = 2193) %>% 
+  summarise(geometry = st_combine(geometry)) %>%
+  st_cast("POLYGON")
+
+
+
+A = mapview(CIRCLE_sf)
+B = mapview(bbox_sf)
+C = mapview(d_sf)
+
+A+B+C
+
+
+# Now fins out what LIDAR Layer this intersects with
+
+Lidar_Index_Tiles = "D:/HerronK/ELF_Project/AndrewsWork/Lidar-Index-Tiles-LINZ/All_LINZ_LiDAR_Index_Tiles.shp"
+
+LIT = st_read(Lidar_Index_Tiles
+              )
+
+ix = st_intersection(LIT, bbox_sf)
+Lidar_Survey_name = unique(ix$name)
+
+lidar_file ="D:/HerronK/ELF_Project/gw/gwData/GW_CHM_1m.kea"
+
+library(terra)
+library(raster)
+LIDAR = rast(lidar_file)
+
+LIDAR_crop = crop(LIDAR, extent( bbox_sf))
+
+Lidar_map = raster(LIDAR_crop)
+```
+
+
+```{r}
+
+A = mapview(CIRCLE_sf, col.regions = "pink",alpha.regions = .18)
+B = mapview(bbox_sf, col.regions = "yellow",alpha.regions = .18)
+C = mapview(d_sf)
+
+D = mapview(Lidar_map)
+
+D + A + B + C
+
+
+```
+
+R Elevation Tutorial
+
+```{r}
+# 
+# library(raster)
+# library(rgdal)
+# library(rgeos)
+# library(gstat)
+# library(rgl)
+# library(rasterVis)
+# 
+# 
+
+
+```
+
+```{r}
+
+
+
+
+```
+

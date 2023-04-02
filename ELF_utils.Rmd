@@ -1,0 +1,43 @@
+---
+title: "Elf_utils"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+
+library(sf)
+library(raster)
+library(tidyverse)
+
+```
+
+# function: sf2coords
+
+Converts TM Coordinates to a vector of floats
+
+
+```{r}
+
+sf2coords = function(SF){
+  
+  if (testmode){
+    
+    SF = st_read("D:\HerronK\ELF_Project\AndrewsWork\layers/test_Point.shp")
+  
+  
+  
+  
+  
+  
+}
+
+
+
+
+
+
+```
+
