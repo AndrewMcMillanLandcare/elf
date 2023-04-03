@@ -491,9 +491,14 @@ SAMPLING_INTERVAL_km = 20
 
 PL = create_parallel_lines(LL = c(1000000, 4700000), UR = c(2100000, 6200000), x_interv = SAMPLING_INTERVAL_km*1000, y_interv=SAMPLING_INTERVAL_km*1000, direction = "H")
 
+
+improved_treeline_lines_ffn = paste0(NTL_dn, "improved_treeline_lines.gpkg")
+st_write(ITL, improved_treeline_lines_ffn, append = F)
+
+
 mapview(PL)
 
-samp_points = st_intersection(RESULT_lines, PL)
+samp_points = st_intersection(ITL, PL)
 
 A = mapview(RESULT_lines, color="green")
 B = mapview(PL, coloor="blue")
@@ -781,11 +786,43 @@ class(data)
 
 # MAINLINE
 
+## ML - 1. create the array of sampling points by intersecting the LCDB Treeline with an array of horizontal lines . Then intersect that layer with the available Lidar layer
+
 ```{r}
+
+#get the LCDB tree line
+
+LCDB_treeline_ffn = paste0(NTL_dn, "improved_treeline_lines.gpkg")
+LCDB_treeline = st_read(LCDB_treeline_ffn)
+
+
+mapview(LCDB_treeline)
+
 
 #get the parallel lines
 
 PL = create_parallel_lines(x_interv=2500, y_interv = 2500)
+
+PLxNTL = st_intersection(PL, LCDB_treeline) 
+PLxNTL_points = PLxNTL %>% st_cast("POINT")
+
+mapview(PLxNTL_points)
+
+
+# Now find the points with LIDAR
+
+lidar_tiles = st_read(paste0("D:/HerronK/ELF_Project/AndrewsWork/Lidar-Index-Tiles-LINZ/All_LINZ_LiDAR_Index_Tiles.shp"))
+
+
+# intersect the Sampling points with the avaialble Lidar Layers
+
+PLxNTLxlidar = st_intersection(PLxNTL_points, lidar_tiles)
+mapview(PLxNTLxlidar)
+
+
+
+PLxNTLxlidar_ffn = paste0(NTL_dn, "PLxNTLxlidar.geojson")
+st_write(PLxNTLxlidar, PLxNTLxlidar_ffn, append = F)
 
 
 
@@ -794,6 +831,100 @@ PL = create_parallel_lines(x_interv=2500, y_interv = 2500)
 
 ```
 
+## ML - 2. Read the PLxNTLxlidar file and select sampling points
+
+```{r}
+
+PLxNTLxlidar_ffn = paste0(NTL_dn, "PLxNTLxlidar.geojson")
+SP_array = st_read(PLxNTLxlidar_ffn)
+
+SP_array %>% pull(NAME) %>% unique()
+
+
+
+set.seed(9876)
+
+SP_sf = SP_array[87,]
+SP = sf2coords(SP_sf)
+
+mapview(SP_sf)
+
+
+```
+
+## ML - 3. Find the Correct DTM for the Point
+
+```{r}
+
+library(stars)
+
+library(terra)
+
+
+Lidar_Survey = SP_sf$NAME
+Lidar_tilename = SP_sf$tilename
+
+
+
+
+
+lidar_all = st_read("D:/HerronK/ELF_Project/AndrewsWork/Lidar-Index-Tiles-LINZ/All_LINZ_LiDAR_Index_Tiles.shp")
+
+
+lidar_all_nogeo = lidar_all %>% st_set_geometry(NULL)
+lidar_all_nogeo %>% filter(is.na(tilename )) 
+
+
+
+lidar_all_nogeo %>% filter(!is.na(tilename )) %>% nrow()
+lidar_all_nogeo %>% filter(tilename == "<NA>") %>% nrow()
+
+lidar_all_nogeo %>% pull(tilename) %>% first()
+
+
+
+DTM_ffn = paste0("D:/HerronK/ELF_Project/marlborough/marlboroughData/marlborough-2020-2021-DEM.kea")
+
+DTM = read_stars(DTM_ffn)
+DTM_10m = st_as_stars(st_bbox(DTM), dx = 10)
+DTM_10m = st_warp(DTM, DTM_10m)
+
+
+DTM_degr = st_warp(DTM, cellsize = 10, use_gdal = T)
+
+
+write_stars(DTM, "D:/HerronK/ELF_Project/marlborough/marlboroughData/marlborough-2020-2021-DEM_10m2.kea")
+
+DTM_poly = st_as_sf(DTM_degr)
+
+DTM_outline = as.polygons(DTM_degr, trunc=T, dissolve = T)
+
+DTM_cropped = crop(DTM, extent(RECT_shp))
+DTM_cropped_masked = mask(DTM_cropped, RECT_shp)
+
+
+
+
+```
+
+
+
+## ML - 4. Find the Steepest Descent
+
+```{r}
+
+
+LEN = 250
+WID = 20
+DIV_deg = 30
+SP = SP
+
+PHI_st = find_steepest_angle(LEN, WID, DIV_deg, SP)
+
+
+
+
+```
 
 
 

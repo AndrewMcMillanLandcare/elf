@@ -218,7 +218,7 @@ crop_rast = function(RAST, VECT){
 ### sf2coords - Converts TM Coordinates to a vector of floats
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-find_steepest_angle = function(LEN, WID, DIV_deg, SP){
+find_steepest_angle = function(LEN, WID, DIV_deg, SP, DTM){
   PHI_deg_seq = seq(DIV_deg,360,DIV_deg)
   tb = data.frame(PHI_deg = PHI_deg_seq ) %>%
     mutate(
@@ -312,11 +312,11 @@ find_Z_at_CH = function(Z,CH, CH_targ){
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
-create_rect = function(SP, len, wid, PHI, ext_back = 0){
+create_rect = function(SP, len, wid, PHI, showmap = F, ext_back = 0){
   testmode = F
   if (testmode){
-    SP[1] = 5477617
-    SP[2] = 1798886
+    SP[1] = 1798886
+    SP[2] = 5477617
     len = 500
     wid = 20
     PHI=360 * pi/180
@@ -358,5 +358,18 @@ create_rect = function(SP, len, wid, PHI, ext_back = 0){
     PTS_ORIG = mapview(xyTosf(SP[1],SP[2]))
     MV + PTS + PTS_ORIG
   }
-  OUT = list(rect, MV, points_x, points_y)
+  
+  if (showmap){
+    OUT = list(rect, MV, points_x, points_y)
+  }else{
+    OUT = list(rect, NA, points_x, points_y)
+  }
+  
 }
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+### locate_lidar_data - Looks inside sampling point and works out where the Lidar is
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
