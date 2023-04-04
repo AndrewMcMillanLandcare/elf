@@ -26,11 +26,14 @@ library(sf)
 library(mapview)
 library(terra)
 library(tictoc)
-source("D:/HerronK/ELF_Project/AndrewsWork/MyCode/R/elf/ea_utils.R")
-source("D:/HerronK/ELF_Project/AndrewsWork/MyCode/R/elf/ELF_utils.R")
+source("K:/rpas/ELF/ELF_Project/AndrewsWork/MyCode/R/elf/ea_utils.R")
+source("K:/rpas/ELF/ELF_Project/AndrewsWork/MyCode/R/elf/ELF_utils.R")
 
 #set up the data folders
-rdn = "D:/HerronK/ELF_Project/"
+# rdn = "K:/rpas/ELF/ELF_Project/"
+rdn = "K:/rpas/ELF/"
+
+
 
 CLTL_rdn = paste0(rdn, "ELFData/Cieraad/")
 AL_dn = paste0(rdn,"AndrewsWork/layers/")
@@ -107,7 +110,7 @@ create_rect = function(SP, len, wid, PHI){
 ```{r Step 1}
 
 #set up the data folders
-rdn = "D:/HerronK/ELF_Project/"
+rdn = "K:/rpas/ELF/ELF_Project/"
 CLTL_rdn = paste0(rdn, "ELFData/Cieraad/")
 AL_dn = paste0(rdn,"AndrewsWork/layers/")
 
@@ -154,7 +157,7 @@ st_read(CLTL_adj_ffn)
 
 ```{r}
 
-LCDB5_ffn = "D:/HerronK/ELF_Project/ELFData/LCDB/lcdb-v50-land-cover-database-version-50-mainland-new-zealand.gpkg"
+LCDB5_ffn = "K:/rpas/ELF/ELF_Project/ELFData/LCDB/lcdb-v50-land-cover-database-version-50-mainland-new-zealand.gpkg"
 LCDB5 = st_read(LCDB5_ffn)
 
 CLTL_adj_ffn = paste0(AL_dn,"CLTL_adj.gpkg")
@@ -185,7 +188,7 @@ if (!exists("LCDBxCLTL_adj")){
 }
 
 if (!exists("LCDB5")){
-  LCDB5_ffn = "D:/HerronK/ELF_Project/ELFData/LCDB/lcdb-v50-land-cover-database-version-50-mainland-new-zealand.gpkg"
+  LCDB5_ffn = "K:/rpas/ELF/ELF_Project/ELFData/LCDB/lcdb-v50-land-cover-database-version-50-mainland-new-zealand.gpkg"
   LCDB5 = st_read(LCDB5_ffn)
   
 }
@@ -240,7 +243,7 @@ outside_polys = LCDB5_intersecting_feat_minus_LCDBxCLTL_adj
 
 # grab the dem
 
-dem_ffn = "D:/HerronK/ELF_Project/ELFData/NZ_DEM/dem_linz_nz_110520_orthonzgd49h_nztm_10m.kea"
+dem_ffn = "K:/rpas/ELF/ELF_Project/ELFData/NZ_DEM/dem_linz_nz_110520_orthonzgd49h_nztm_10m.kea"
 dem = rast(dem_ffn)
 
 # extract zonal stats from the DEM
@@ -811,7 +814,7 @@ mapview(PLxNTL_points)
 
 # Now find the points with LIDAR
 
-lidar_tiles = st_read(paste0("D:/HerronK/ELF_Project/AndrewsWork/Lidar-Index-Tiles-LINZ/All_LINZ_LiDAR_Index_Tiles.shp"))
+lidar_tiles = st_read(paste0("K:/rpas/ELF/ELF_Project/AndrewsWork/Lidar-Index-Tiles-LINZ/All_LINZ_LiDAR_Index_Tiles.shp"))
 
 
 # intersect the Sampling points with the avaialble Lidar Layers
@@ -868,7 +871,7 @@ Lidar_tilename = SP_sf$tilename
 
 
 
-lidar_all = st_read("D:/HerronK/ELF_Project/AndrewsWork/Lidar-Index-Tiles-LINZ/All_LINZ_LiDAR_Index_Tiles.shp")
+lidar_all = st_read("K:/rpas/ELF/ELF_Project/AndrewsWork/Lidar-Index-Tiles-LINZ/All_LINZ_LiDAR_Index_Tiles.shp")
 
 
 lidar_all_nogeo = lidar_all %>% st_set_geometry(NULL)
@@ -883,7 +886,7 @@ lidar_all_nogeo %>% pull(tilename) %>% first()
 
 
 
-DTM_ffn = paste0("D:/HerronK/ELF_Project/marlborough/marlboroughData/marlborough-2020-2021-DEM.kea")
+DTM_ffn = paste0("K:/rpas/ELF/ELF_Project/marlborough/marlboroughData/marlborough-2020-2021-DEM.kea")
 
 DTM = read_stars(DTM_ffn)
 DTM_10m = st_as_stars(st_bbox(DTM), dx = 10)
@@ -893,7 +896,7 @@ DTM_10m = st_warp(DTM, DTM_10m)
 DTM_degr = st_warp(DTM, cellsize = 10, use_gdal = T)
 
 
-write_stars(DTM, "D:/HerronK/ELF_Project/marlborough/marlboroughData/marlborough-2020-2021-DEM_10m2.kea")
+write_stars(DTM, "K:/rpas/ELF/ELF_Project/marlborough/marlboroughData/marlborough-2020-2021-DEM_10m2.kea")
 
 DTM_poly = st_as_sf(DTM_degr)
 
@@ -975,7 +978,7 @@ A+B+C
 
 # Now fins out what LIDAR Layer this intersects with
 
-Lidar_Index_Tiles = "D:/HerronK/ELF_Project/AndrewsWork/Lidar-Index-Tiles-LINZ/All_LINZ_LiDAR_Index_Tiles.shp"
+Lidar_Index_Tiles = "K:/rpas/ELF/ELF_Project/AndrewsWork/Lidar-Index-Tiles-LINZ/All_LINZ_LiDAR_Index_Tiles.shp"
 
 LIT = st_read(Lidar_Index_Tiles)
 
@@ -987,7 +990,7 @@ lidar_stub_list =c("gw", "hbrc", "marlborough", "Taranaki", "nt")
 
 #try and obtain a polygon that is the boudary of the lidar data
 
-filetbl = read_csv("D:/HerronK/ELF_Project/AndrewsWork/Lidar-Data-File-Table.csv")
+filetbl = read_csv("K:/rpas/ELF/ELF_Project/AndrewsWork/Lidar-Data-File-Table.csv")
 
 lidar_chm_ffn = paste0(filetbl$REG_Folder[filetbl$REG_ABB=="MARL"], "\\",filetbl$CHM[filetbl$REG_ABB=="MARL"])
 file.exists(lidar_chm_ffn)
@@ -1351,11 +1354,11 @@ names_in_tile_index = c("wellington", "not-present",
                         ```{r}
                         
                         
-                        dn = "D:/HerronK/ELF_Project/Taranaki/TaranakiProfiles/"
+                        dn = "K:/rpas/ELF/ELF_Project/Taranaki/TaranakiProfiles/"
                         fn = "taranaki2_chmProfile.json"
                         ffn = paste0(dn,fn)
                         
-                        dn = "D:/HerronK/ELF_Project/gw/gwProfiles/"
+                        dn = "K:/rpas/ELF/ELF_Project/gw/gwProfiles/"
                         fn = "gw6_chmProfile.json"
                         ffn = paste0(dn,fn)
                         
@@ -1390,7 +1393,7 @@ names_in_tile_index = c("wellington", "not-present",
                         coords_sf = st_as_sf(coords_tr, coords = c("lat", "lon"), crs = 2193)
                         mapview(coords_sf)
                         
-                        coords_shp_ffn =  "D:/HerronK/ELF_Project/AndrewsWork/TestTr.shp"
+                        coords_shp_ffn =  "K:/rpas/ELF/ELF_Project/AndrewsWork/TestTr.shp"
                         st_write(coords_sf , coords_shp_ffn)
                         
                         
@@ -1406,19 +1409,19 @@ names_in_tile_index = c("wellington", "not-present",
                         library(mapview)
                         library(terra)
                         
-                        source("D:/HerronK/ELF_Project/AndrewsWork/MyCode/R/ea_utils.R")
+                        source("K:/rpas/ELF/ELF_Project/AndrewsWork/MyCode/R/ea_utils.R")
                         
-                        LCDB5_ffn = "D:/HerronK/ELF_Project/ELFData/LCDB/lcdb-v50-land-cover-database-version-50-mainland-new-zealand.gpkg"
+                        LCDB5_ffn = "K:/rpas/ELF/ELF_Project/ELFData/LCDB/lcdb-v50-land-cover-database-version-50-mainland-new-zealand.gpkg"
                         file.exists(LCDB5_ffn)
                         
-                        # dem_dn = "D:/HerronK/ELF_Project/ELFData/NZ_DEM/"
+                        # dem_dn = "K:/rpas/ELF/ELF_Project/ELFData/NZ_DEM/"
                         # dem_fn = "dem_linz_nz_110520_orthonzgd49h_nztm_10m.kea"
                         # dem_ffn = paste0(dem_dn, dem_fn)
                         # dem = rast(dem_ffn)
                         # plot(dem)
                         # class(dem)
                         
-                        root1 = "D:/HerronK/ELF_Project/AndrewsWork/"
+                        root1 = "K:/rpas/ELF/ELF_Project/AndrewsWork/"
                         DEM_masked = st_read(paste0(root1, "DEM_MASKED_POLY.json"))
                         
                         mapview(DEM_masked)
@@ -1426,7 +1429,7 @@ names_in_tile_index = c("wellington", "not-present",
                         
                         # A = st_intersection("")
                         
-                        DIROUT = "D:/HerronK/ELF_Project/AndrewsWork/"
+                        DIROUT = "K:/rpas/ELF/ELF_Project/AndrewsWork/"
                         
                         DEM_maskedxLCDB = ea_intersection(LCDB5, DEM_masked, PC = "PNGeo04-W10", "Stub_", dn = DIROUT, val = "none", parallel = T, ncore = 7, filetype = "GPKG", diff_opt = F, simplify_opt = F, tol = NULL)
                         
@@ -1445,7 +1448,7 @@ names_in_tile_index = c("wellington", "not-present",
                         
                         ```{r}
                         
-                        dn = "D:/HerronK/ELF_Project/AndrewsWork/Lidar-Index-Tiles-LINZ/"
+                        dn = "K:/rpas/ELF/ELF_Project/AndrewsWork/Lidar-Index-Tiles-LINZ/"
                         
                         
                         lidar_tiles_dn = list.dirs(dn, recursive = F)
