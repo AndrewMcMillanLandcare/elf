@@ -8,6 +8,8 @@ editor_options:
 
 Last updated 29/06/23 06:28
 
+# libraries and folders
+
 
 ```{r}
 
@@ -60,6 +62,7 @@ if (Current_PC == ""){
   rootDrive <- "/home/mcmillana/"
   elfdir = "/mnt/data/mcmillana/PRJ3597-MPI-ELF/"
   GeoSpatRoot = "/mnt/data/mcmillana/NZ-Geospatial-Data/"
+  source("/home/mcmillana/code/R/utils/mcm_sp_utils.R") 
   
 } else if (Current_PC == "L-8P30JW3") {
   os <- "win10"
@@ -79,9 +82,19 @@ if (Current_PC == ""){
 
 ```{r}
 
-merge_elf_layers = function(LA_INPUT, LB_INPUT, datadir,  ffn_stub_list, ncore_rec = 36){
+merge_elf_layers = function(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_descr, elf_merge_dir,  ffn_stub_list, ncore_rec = 36){
   
-  tic()
+  #----test input data
+  elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF/")
+  ffn_stub_list = c("L0xL1", "L0_minus_L0xL1", "L1_minus_L0xL1", "L0_L1_MERGED")
+  LA_INPUT = ELF_2012_TO_KEEP_PROPER
+  LB_INPUT = LIMITING_SOILS_PODZOLS
+  ncore_rec = 36
+  LB_LIM_FIELDNAME = "PODZOLS"
+  LB_LIMITATION_descr = "Substrate Podzols"
+  #------------------
+  
+  tic("whole function")
   LA_ORIG =  LA_INPUT %>%  mutate(LA_UID = 1:nrow(.))
   LB_ORIG =  LB_INPUT %>%  mutate(LB_UID = 1:nrow(.))
   
@@ -108,7 +121,7 @@ merge_elf_layers = function(LA_INPUT, LB_INPUT, datadir,  ffn_stub_list, ncore_r
   print("++++++++")
   print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
   
-  LAxLB = ea_intersection(LB, LA_overlaps,PC = Current_PC, ffn_stub = ffn_stub_list[1], dn = datadir, parallel = T, ncore = ncore_rec, val = "both",diff_opt = F )
+  LAxLB = ea_intersection(LB, LA_overlaps,PC = Current_PC, ffn_stub = ffn_stub_list[1], dn = elf_merge_dir, parallel = T, ncore = ncore_rec, val = "both",diff_opt = F )
   
   LAxLB_unn = st_union(LAxLB)
   
@@ -118,7 +131,7 @@ merge_elf_layers = function(LA_INPUT, LB_INPUT, datadir,  ffn_stub_list, ncore_r
   print("++++++++")
   print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
   
-  LA_minus_LAxLB = ea_intersection(LB, LBxLA_unn,PC = Current_PC, ffn_stub = ffn_stub_list[2], dn = datadir, parallel = T, ncore = ncore_rec, val = "P1",filetype = "SHP",diff_opt = T )
+  LA_minus_LAxLB = ea_intersection(LA, LAxLB_unn,PC = Current_PC, ffn_stub = ffn_stub_list[2], dn = elf_merge_dir, parallel = T, ncore = ncore_rec, val = "P1",filetype = "SHP",diff_opt = T )
   
   print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
   print("++++++++")
@@ -127,14 +140,68 @@ merge_elf_layers = function(LA_INPUT, LB_INPUT, datadir,  ffn_stub_list, ncore_r
   print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
   
   
-  LB_minus_LAxLB = ea_intersection(LB, LBxLA_unn,PC = Current_PC, ffn_stub = ffn_stub_list[3], dn = datadir, parallel = T, ncore = ncore_rec, val = "P1",filetype = "SHP",diff_opt = T )
+  LB_minus_LAxLB = ea_intersection(LB, LAxLB_unn,PC = Current_PC, ffn_stub = ffn_stub_list[3], dn = elf_merge_dir, parallel = T, ncore = ncore_rec, val = "P1",filetype = "SHP",diff_opt = T )
+  
+  # Step 4a - Limitation attributes for LAxLB - inherit all from LA, add new from LB and change type to "Multiple"
+  LA_attr = LA_ORIG %>% st_set_geometry(NULL) %>% as_tibble()
   
   
+  LAxLB_w_attr = LAxLB %>% 
+    left_join(LA_attr, by = "LA_UID") %>% 
+    mutate(
+      !!LB_LIM_FIELDNAME := 1,
+      LIMITATION = "Multiple")
   
+  # Step 4b - Limitation attributes for LA_minus_LAxLB - inherit all attr and type from LA
   
-  print(toc())
+  LA_minus_LAxLB_w_attr = LA_minus_LAxLB %>% 
+    left_join(LA_attr, by = "LA_UID") 
   
-  OUT = list(LAxLB, LA_minus_LAxLB, LB_minus_LAxLB)
+  # Step 4c - Limitation attributes for LB_minus_LAxLB - inherit all attr and type from LA
+  
+  LB_minus_LAxLB_w_attr = LB_minus_LAxLB %>% 
+    mutate(
+      DRY=0, 
+      LIMITED=0,
+      FROST_FLAT=0,
+      SALINE=0,
+      ULTRAMAFIC=0,
+      HOT_GEOTHM=0,
+      PAKIHI=0,
+      GUMLANDS=0,
+      SALT_SPRAY=0,
+      LIMITATION=0,
+      WET=0,
+      COLD_BASIN=0, 
+      PODZOLS =0,
+      TREELINE=0) %>% 
+    mutate(
+      !!LB_LIM_FIELDNAME := 1,
+      LIMITATION = LB_LIMITATION_descr
+    ) 
+      
+  
+  # Step 5 - Bind the three sets of data together, remove the UID and save.
+  
+  LA_LB_MERGED = bind_rows(LAxLB_w_attr, LA_minus_LAxLB_w_attr, LB_minus_LAxLB_w_attr) %>% 
+    select(!contains("UID"))
+
+  Length_non_valid = length(which(!st_is_valid(LA_LB_MERGED)))
+  
+  LA_LB_MERGED_ffn = paste0(elf_merge_dir, ffn_stub_list[[4]], ".gpkg")
+  st_write(LA_LB_MERGED, LA_LB_MERGED_ffn, append = F)
+  print(paste("Writing the Newly Merged layer to", LA_LB_MERGED_ffn))
+  # mapview(MERGED_LAYER)
+  # Step 5b - Replace 
+  
+  # Step 5 - Remove Polygons from LA that intersect with LB
+  
+  # Step 6 - Merge the 3 layers
+  
+  WF = toc()
+  print(paste("whole merge function took",WF))
+  
+  OUT = list(LAxLB, LA_minus_LAxLB, LB_minus_LAxLB, LA_LB_MERGED )
 }
 
 ```
@@ -154,8 +221,14 @@ Approach for merging a new layer Lb into the exisiting layer La
 2. La_minus_LaxLb: Get the difference between La and LaxLb. These are the polygons from the old layer that remain
 3. Lb_minus_LaxLb: Get the difference between Lb and LaxLb. These are the polygons from the new layer that will be merged and extend the area of limitation
 
+# merging layers
+
 ```{r}
 
+
+elf_2012_layer_ffn = "/mnt/data/mcmillana/PRJ3597-MPI-ELF/DATA/mfe-environmental-limiting-factors-2012-SHP/environmental-limiting-factors-2012.shp"
+elf_2012_layer=st_read(elf_2012_layer_ffn)
+elf_2012_layer %>% pull(LIMITATION) %>% unique()
 
 elf_merge_dn = paste0(elfdir, "DATA/MERGING_ELF/")
 
@@ -170,12 +243,19 @@ ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
 L0 = ELF_2012_TO_KEEP_PROPER
 L1 = LIMITING_SOILS_PODZOLS
 
+LB_LIM_TYPE = "PODZOLS"
+LB_LIMITATION_descr = "Substrate Podzols"
 ffn_stub_curr = "L0xL1"
 
 ffn_stub_list = c("L0xL1", "L0_minus_L0xL1", "L1_minus_L0xL1")
 
-L0xL1 = merge_elf_layers(L0,L1, datadir = elf_merge_dn, ffn_stub_list = ffn_stub_list,ncore_rec = 36) #551 seconds
+MRG_LAYERS = merge_elf_layers(L0,L1, datadir = elf_merge_dn, ffn_stub_list = ffn_stub_list,ncore_rec = 36) #551 seconds
 
+MRG_LAYERS = L0xL1
+
+MRG_LAYERS[[1]]
+MRG_LAYERS[[2]]
+MRG_LAYERS[[3]]
 
 ```
 
