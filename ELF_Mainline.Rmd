@@ -26,12 +26,21 @@ library(sf)
 library(mapview)
 library(terra)
 library(tictoc)
-source("K:/rpas/ELF/ELF_Project/AndrewsWork/MyCode/R/elf/ea_utils.R")
-source("K:/rpas/ELF/ELF_Project/AndrewsWork/MyCode/R/elf/ELF_utils.R")
 
+
+
+rdn = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
+
+
+source(paste0(rdn,"AndrewsWork/MyCode/R/elf/ea_utils.R"))
+source(paste0(rdn,"AndrewsWork/MyCode/R/elf/ELF_utils.R"))
+source("C:/Users/McMillanAn/OneDrive - MWLR/Code/R/utils/mcm_sp_utils.R")
 #set up the data folders
 # rdn = "K:/rpas/ELF/ELF_Project/"
-rdn = "K:/rpas/ELF/"
+
+
+
+# rdn = "K:/rpas/ELF/"
 
 
 
@@ -99,6 +108,23 @@ create_rect = function(SP, len, wid, PHI){
 
 
 ```{r}
+
+
+# LRI = ea_load("LUC")
+SMAP = ea_load("SMAP")
+FSL_NZGD49 = ea_load("FSL")
+
+CRS = st_crs(SMAP)
+FSL = st_transform(FSL_NZGD49, CRS)
+
+SMAP_cmb = st_combine(SMAP)
+
+datadir = "C:/Users/McMillanAn/OneDrive - MWLR/Projects/PRJ3597-MPI-ELF/data/"
+
+dir.exists(datadir)
+
+FSL_MINUS_SMAP = ea_intersection(FSL,SMAP_cmb,  PC = Current_PC, "FSL_MINUS_SMAP", dn = datadir, val = T, parallel = T, diff_opt = T, ncore = 16, filetype = "SHP" )
+
 
 
 
@@ -929,6 +955,160 @@ PHI_st = find_steepest_angle(LEN, WID, DIV_deg, SP)
 
 ```
 
+
+
+# OLD ELF LAYER
+
+```{r}
+
+ELF_2012_ffn  ="C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/mfe-environmental-limiting-factors-2012-SHP/environmental-limiting-factors-2012.shp"
+
+
+ELF_2012 = st_read(ELF_2012_ffn)
+ELF_2012
+
+names(ELF_2012)
+
+
+UM = ELF_2012 %>% filter(ULTRAMAFIC==1)# & LIMITATION == "Multiple")
+mapview(UM)
+
+
+
+
+```
+
+# Extracting the RAINFALL throu soil types
+
+```{r}
+
+RAIN_ffn = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/nz_mar/w001001.adf"
+
+RAIN = rast(RAIN_ffn)
+plot(RAIN)
+
+SMAP_FSL_CMB_NZSC_ffn = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/SMAP_FSL_CMB_NZSC.shp"
+
+SMAP_FSL_CMB_NZSC = st_read(SMAP_FSL_CMB_NZSC_ffn)
+
+moisture_limiting_soils_list = c("S","WX", "RXA", "RXT")
+
+LIMITING_SOILS = SMAP_FSL_CMB_NZSC %>% 
+  dplyr::mutate(POLY_UID = 1:nrow(.)) %>% 
+  filter(NZSC %in% moisture_limiting_soils_list) 
+  
+
+#read a polygon for the North Island
+NI_poly_ffn = paste0(AL_dn,"NI.gpkg")
+NI_poly = st_read(NI_poly_ffn)
+
+#read a polygon for the North Island
+SI_poly_ffn = paste0(AL_dn,"SI.gpkg")
+SI_poly = st_read(SI_poly_ffn)
+
+LIMITING_SOILS
+
+
+
+mapview(LIMITING_SOILS)
+
+
+library(exactextractr)
+
+LIMITING_SOILS_w_RAIN = exact_extract(SMAP_FSL_CMB_NZSC, LIMITING_SOILS, )
+
+```
+
+#PAKAHI SOILS
+
+```{r}
+
+
+
+
+WONI_ffn = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/Wetlands.gdb"
+
+WONI = st_read(WONI_ffn, layer = "Current_wetland_sites")
+
+names(WONI)
+WONI %>% pull(Source) %>% unique()
+
+WONI_PAK = WONI %>% filter(str_detect(Source,"pak") | str_detect(Source,"Pak"))
+WONI_PAK %>% pull(Source) %>% unique()
+
+SI_WL = rast("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/WONI/2015-01-22MfE/sihisto_typo.img")
+
+SI_WL_sel = SI_WL == 1
+
+NI_WL = rast("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/WONI/2015-01-22MfE/nihisto_typo.img")
+
+NI_WL_sel = NI_WL == 1
+
+plot(SI_WL_sel)
+names(SI_WL)
+
+plot(NI_WL_sel)
+names(NI_WL)
+
+CL = 
+
+SI_WL_num = as.numeric(SI_WL)
+
+
+SI_WL_PAK = SI_WL[SI_WL==1]
+plot(SI_WL_PAK)
+
+SI_WL_r=raster(SI_WL)
+
+SI_WL_val = as.numeric(SI_WL,1) 
+SI_WL_val = as.numeric(SI_WL,2)
+
+SI_WL_val_PAK= SI_WL_val
+SI_WL_val_PAK[SI_WL_val_PAK!=1]=0
+
+SI_WL_derat = deratify(SI_WL_r)
+
+
+str(SI_WL_r)
+
+SI_WL_r
+
+
+PAK_vals = SI_WL_r@data@attributes
+
+plot(PAK)
+mapview(WONI_PAK)
+
+```
+
+
+# DEV 1 - accessing Lidar data through the LINZ API
+
+```{r}
+
+
+my_WMTS_API_key = "f1d3cc0f02134a549b8e1071b48e2639"
+
+
+
+layer_url = paste0('https://data.linz.govt.nz/services;key=',my_WMTS_API_key,'/wmts/1.0.0/layer/53592/WMTSCapabilities.xml')
+
+
+
+bbox = QgsRectangle(19456867.78889, -5061757.6665, 19462438.3959, -5059324.4087)
+
+
+
+library(httr)
+
+REQUEST = "https://data.linz.govt.nz/services;key=f1d3cc0f02134a549b8e1071b48e2639/wmts/1.0.0/layer/53621/WMTSCapabilities.xml"
+
+
+res = GET(REQUEST)
+
+https://tiles-cdn.koordinates.com/services;key=f1d3cc0f02134a549b8e1071b48e2639/tiles/v4/layer=53621/EPSG:3857/{z}/{x}/{y}.png
+
+```
 
 
 
