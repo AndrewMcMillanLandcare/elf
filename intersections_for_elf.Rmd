@@ -1,0 +1,361 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+#Packages
+
+```{r}
+
+
+library(sf)
+library(tidyverse)
+# library(mapview)
+library(cowplot)
+library(lubridate)
+# library(xlsx)
+library(readxl)
+library(rmapshaper)
+library(mapview)
+# library(rmapshaper)
+library(plotly)
+library(tictoc)
+library(parallel)
+library(doParallel)
+library(terra)
+library(openxlsx)
+library(scales)
+library(purrr)
+library(furrr)
+library(terra)
+
+Current_PC <- Sys.info()["nodename"]
+
+root = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
+datadir = paste0(root, "DATA/")
+plotdir = paste0(root, "plot/")
+
+source("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/Rcode/mcm_sp_utils.R")
+
+```
+
+```{r}
+
+LRI = st_read("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/lris-nzlri-land-use-capability-2021-SHP/nzlri-land-use-capability-2021.shp")
+SMAP = st_read("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/smap-snapshot-2022-polygons/SmapPolygonsSibling1.shp")
+FSL_SMAP_COMB  = st_read("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/FSL_ORIG_NO_SMAPxLCDB_filt.shp")
+
+CRS = st_crs(SMAP)
+FSL = FSL_NZGD49%>% st_transform(crs = CRS)
+
+SMAP_CMB = st_combine(SMAP)
+
+FSL_MINUS_SMAP = ea_intersection(FSL, SMAP,PC = Current_PC, ffn_stub = "FSL_MINUS_SMAP", dn = datadir, parallel = T, ncore = 32, val = "both",filetype = "SHP",diff_opt = T )
+
+```
+
+```{r}
+FSL_SMAP = st_read("/mnt/data/mcmillana/PRJ3597-MPI-ELF/data/SMAP_FSL_2022/SmapFSL polygons December 2022.shp")
+FSL_SMAP_minus_SMAP = FSL_SMAP %>% filter(Source != "smap")
+
+st_write(FSL_SMAP_minus_SMAP, paste0(datadir,"FSL_SMAP_minus_SMAP.shp" ), append=F)
+
+FSL_SMAP_minus_SMAP_centroids = st_centroid(FSL_SMAP_minus_SMAP)
+
+FSL_NZGD49  = ea_load("FSL")
+
+CRS = st_crs(FSL_SMAP)
+FSL = FSL_NZGD49%>% st_transform(crs = CRS) %>% 
+  mutate(POLY_UID = 1:nrow(.))
+
+# FSL_NOT_SMAP_bix = st_intersects(FSL, FSL_SMAP_minus_SMAP_centroids)
+
+FSL_ORIG_NO_SMAP = ea_intersection(FSL, FSL_SMAP_minus_SMAP, PC = Current_PC,ffn_stub = "FSL_ORIG_NO_SMAP", dn = datadir, parallel = T, ncore = 32, filetype = "SHP")
+
+
+SMAP = ea_load("SMAP")
+
+
+SMAP_NZSC = SMAP %>% select(NZSC) %>% mutate(SRC = "SMAP")
+FSL_ORIG_NO_SMAP_NZSC = FSL_ORIG_NO_SMAP %>% select(NZSC = NZSC_CLASS)%>% mutate(SRC = "FSL")
+
+SMAP_FSL_CMB_NZSC = SMAP_NZSC %>% bind_rows(FSL_ORIG_NO_SMAP_NZSC)
+st_write(SMAP_FSL_CMB_NZSC, paste0(datadir, "SMAP_FSL_CMB_NZSC.shp"), append = F)
+
+saline_classes = c("RFQ", "RFMQ", "WGFQ", "WGQ")
+
+SMAP_FSL_CMB_NZSC_FILT_SALINE = SMAP_FSL_CMB_NZSC %>% filter(NZSC %in% saline_classes)
+
+SMAP_FSL_CMB_NZSC_FILT_SALINE %>% pull(NZSC) %>% unique()
+
+mapview(SMAP_FSL_CMB_NZSC_FILT_SALINE)
+
+st_write(SMAP_FSL_CMB_NZSC_FILT_SALINE, paste0(datadir, "SMAP_FSL_CMB_NZSC_FILT_SALINE.shp"), append = F)
+
+```
+
+
+
+
+```{r}
+
+
+SMAP_FSL_CMB_NZSC = st_read(paste0(datadir, "SMAP_FSL_CMB_NZSC.shp"))
+
+LCDB = ea_load("LCDB")
+
+FSL_ORIG_NO_SMAP = ea_intersection(SMAP_FSL_CMB_NZSC, LCDB, PC = Current_PC,ffn_stub = "SMAP_FSL_CMB_NZSCxLCDB", dn = datadir, parallel = T, ncore = 32, filetype = "SHP")
+
+FSL_ORIG_NO_SMAPxLCDB = FSL_ORIG_NO_SMAP
+remove(FSL_ORIG_NO_SMAP)
+
+forest_classes = c("Broadleaved Indigenous Hardwoods", "Exotic Forest", "Indigenous Forest", "Deciduous Hardwoods", "Forest - Harvested")
+
+names(FSL_ORIG_NO_SMAPxLCDB)
+
+FSL_ORIG_NO_SMAPxLCDB %>% pull(NZSC) %>% unique()
+FSL_ORIG_NO_SMAPxLCDB %>% pull(Name_2018) %>% unique()
+
+FSL_ORIG_NO_SMAPxLCDB_filt = FSL_ORIG_NO_SMAPxLCDB %>% 
+  filter(substr(NZSC,1,1) == "Z" & (!(Name_2018 %in% forest_classes)))
+
+st_write(FSL_ORIG_NO_SMAPxLCDB_filt, paste0(datadir, "FSL_ORIG_NO_SMAPxLCDB_filt.shp"), append = F)
+
+#TOo wet limitations
+
+FSL_ORIG_NO_SMAPxLCDB = st_read("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/SMAP_FSL_CMB_NZSCxLCDB.shp")
+
+SOIL_LIMITATIONS_TOO_WET = FSL_ORIG_NO_SMAPxLCDB %>% filter(substr(NZSC,1,1) == "O" & (!(Name_2018 %in% forest_classes)))
+
+mapview(SOIL_LIMITATIONS_TOO_WET)
+
+st_write(SOIL_LIMITATIONS_TOO_WET, paste0(datadir, "SOIL_LIMITATIONS_TOO_WET.shp"), append = F)
+
+```
+
+```{r}
+
+LRI = ea_load("LUC")
+names(LRI)
+
+LRI %>% pull(rock) %>% unique()
+UM = LRI %>% filter(str_detect(rock, "Um"))
+mapview(UM)
+```
+
+#Creating the final ELF
+
+```{r}
+ELF_2012_ffn = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/mfe-environmental-limiting-factors-2012-SHP/environmental-limiting-factors-2012.shp"
+
+ELF_2012 = st_read(ELF_2012_ffn)
+ELF_2012 %>% pull(LIMITATION) %>% unique()
+
+mapview(ELF_2012)
+
+old_limiting_factors = c("Substrate Podzols", "Too Dry",  "Too Cold Near Treeline", "Multiple", "Too Wet", "None") #Saline does not have any individual limiting factors
+
+ELF_2012_TO_KEEP = ELF_2012 %>% filter(!LIMITATION %in% old_limiting_factors) #JUST ELF 2012 LIMITATIONS. NO MULTIPLE
+ELF_2012_TO_KEEP %>% pull(LIMITATION) %>% unique()
+
+ELF_2012_MULTIPLE_LIM = ELF_2012 %>% filter(LIMITATION == "Multiple")
+
+limiting_factors_to_keep_xpl = ELF_2012_MULTIPLE_LIM %>% 
+  filter(FROST_FLAT == 1 | ULTRAMAFIC == 1 | HOT_GEOTHM == 1 |PAKIHI == 1 | GUMLANDS == 1 |
+           SALT_SPRAY == 1 | COLD_BASIN == 1)
+
+limiting_factors_to_keep_xpl_updated = limiting_factors_to_keep_xpl %>% 
+  mutate(
+    PODZOLS = 0,
+    TREELINE = 0,
+    DRY = 0,
+    SALINE = 0,
+    WET = 0
+  )
+
+limiting_factors_to_keep_update_names = limiting_factors_to_keep_xpl_updated %>% mutate(limiting_factors_to_keep_xpl_updated, 
+                                                                                        LIMITATION = case_when(
+                                                                                          FROST_FLAT == 1 & 
+                                                                                            (ULTRAMAFIC == 1 | HOT_GEOTHM == 1 
+                                                                                             | PAKIHI == 1 | GUMLANDS == 1| SALT_SPRAY == 1 ) ~ "Multiple",
+                                                                                          ULTRAMAFIC == 1 & 
+                                                                                            (HOT_GEOTHM == 1 | PAKIHI == 1 | 
+                                                                                               GUMLANDS == 1 | SALT_SPRAY == 1) ~ "Multiple",
+                                                                                          HOT_GEOTHM == 1 & (PAKIHI == 1 | GUMLANDS == 1 | 
+                                                                                                               SALT_SPRAY == 1) ~ "Multiple",
+                                                                                          PAKIHI == 1 & (GUMLANDS == 1 | SALT_SPRAY == 1) ~ "Multiple",
+                                                                                          GUMLANDS == 1 & SALT_SPRAY == 1 ~ "Multiple",
+                                                                                          FROST_FLAT == 1 ~ "Too Cold Frost Flats",
+                                                                                          ULTRAMAFIC == 1 ~ "Substrate Ultramafic",
+                                                                                          HOT_GEOTHM == 1 ~ "Too Hot Geothermal",
+                                                                                          PAKIHI == 1 ~ "Substrate Pakihi",
+                                                                                          GUMLANDS == 1 ~ "Substrate Gumlands",
+                                                                                          SALT_SPRAY == 1 ~ "Too Exposed Salt Spray"
+                                                                                        ))
+
+ELF_2012_TO_KEEP_FINAL = rbind(ELF_2012_TO_KEEP, limiting_factors_to_keep_update_names)
+st_write(ELF_2012_TO_KEEP_FINAL, paste0(datadir, "MERGING_ELF/ELF_2012_TO_KEEP_PROPER.shp"), append = F)
+
+mapview(ELF_2012_TO_KEEP_FINAL)
+
+
+```
+
+#Merging in new layers
+
+```{r}
+
+LIMITING_SOILS_PODZOLS_ffn = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/finished_unmerged_layers/LIMITING_SOILS_PODZOLS.shp"
+
+LIMITING_SOILS_PODZOLS = st_read(LIMITING_SOILS_PODZOLS_ffn)
+
+ELF_2012_TO_KEEP_PROPER_ffn = paste0(datadir, "MERGING_ELF/ELF_2012_TO_KEEP_PROPER.shp")
+ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
+
+ELF_2012_TO_KEEP_PROPER_ffn = paste0(datadir, "MERGING_ELF/ELF_2012_TO_KEEP_PROPER.shp")
+ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
+
+NEW_TREELINE_ffn =paste0(datadir, "MERGING_ELF/NZ-High-Alt-Treeline-layer-02_23_v2.gpkg")
+NEW_TREELINE = st_read(NEW_TREELINE_ffn)
+
+NEW_TREELINE_val = st_is_valid(NEW_TREELINE)
+
+which(!NEW_TREELINE_val)
+
+
+
+
+L1 = ELF_2012_TO_KEEP_PROPER
+L2 = LIMITING_SOILS_PODZOLS
+L3 = NEW_TREELINE
+
+tic()
+L1xL2 = find_overlapping(L1, L2)
+toc()
+
+find_overlapping = function(L1, L2){
+  
+  
+  P1_ORIG =  L1 %>%  mutate(P1_UID = 1:nrow(.))
+  P2_ORIG =  L2 %>%  mutate(P2_UID = 1:nrow(.))
+  
+  
+  
+  P1 = P1_ORIG  %>% select(P1_UID, geometry)
+  P2 = P2_ORIG %>% select(P2_UID, geometry)
+  
+  P1_x_P2 = st_intersects(P1,P2)
+  length(P1_x_P2)
+  
+  P1_overlaps_ix = which(lengths(P1_x_P2) > 0)
+  length(P1_overlaps_ix)
+  P1_overlaps = P1[P1_overlaps_ix,]
+  
+  # tic()
+  # P2_x_P1 = st_intersects(P2,P1_overlaps)
+  # toc()
+  # length(P2_x_P1)
+  
+  P2xP1_overlaps = ea_intersection(P2, P1_overlaps,PC = Current_PC, ffn_stub = "P2xP1_overlaps", dn = datadir, parallel = T, ncore = 18, val = "both",filetype = "SHP",diff_opt = F )
+  
+  
+  BOX = st_read(paste0(datadir, "MERGING_ELF/ELF_TEST_BOX.shp"))
+  mapview(BOX)
+  
+  
+  #Testing st_difference on the box
+  
+  ELF_2012_TO_KEEP_PROPER_BOX = st_crop(ELF_2012_TO_KEEP_PROPER, BOX)
+  LIMITING_SOILS_PODZOLS_BOX = st_crop(LIMITING_SOILS_PODZOLS, BOX)
+  P2xP1_overlaps_BOX = st_crop(P2xP1_overlaps, BOX)
+  
+  ELF_2012_TO_KEEP_PROPER_BOX_not_ol = st_difference(ELF_2012_TO_KEEP_PROPER_BOX, st_union(P2xP1_overlaps_BOX))
+  LIMITING_SOILS_PODZOLS_BOX_not_ol = st_difference(LIMITING_SOILS_PODZOLS_BOX, st_union(P2xP1_overlaps_BOX))
+  mapview(ELF_2012_TO_KEEP_PROPER_BOX_not_ol)
+  
+  #K test
+  #ELF_2012_TO_KEEP_PROPER_BOX_not_ol = gDifference(ELF_2012_TO_KEEP_PROPER_BOX, LIMITING_SOILS_PODZOLS_BOX)
+  
+  
+  A = mapview(ELF_2012_TO_KEEP_PROPER_BOX_not_ol, col.region = "pink")
+  P = mapview(LIMITING_SOILS_PODZOLS_BOX)
+  B = mapview(LIMITING_SOILS_PODZOLS_BOX_not_ol, col.region = "blue")
+  C = mapview(P2xP1_overlaps_BOX, col.region = "green")
+
+  A+B
+  A+B+C
+  
+  # Scaling it up to NZ to see if it crashes / takes hours :P
+  
+  ELF_2012_TO_KEEP_PROPER_NO_PODZOL_OVERLAP = st_difference(ELF_2012_TO_KEEP_PROPER, st_union(P2xP1_overlaps))
+  LIMITING_SOILS_PODZOLS_NO_ELF_OVERLAP = st_difference(LIMITING_SOILS_PODZOLS, st_union(P2xP1_overlaps))
+  
+  P1_ORIG_nogeo = P1_ORIG %>% st_set_geometry(NULL)
+  
+  P2xP1_overlaps_fullelf = P2xP1_overlaps %>% 
+    left_join(P1_ORIG_nogeo, by = "P1_UID") %>% 
+    mutate(
+      LIMITATION = "Multiple",
+      PODZOLS = 1)
+  
+  
+  
+  # 
+  # 
+  # P1_UID_overlaps = P2xP1_overlaps %>% st_set_geometry(NULL) %>% as_tibble() %>% select(P1_UID) %>% pull(P1_UID)
+  # P2_UID_overlaps = P2xP1_overlaps %>% st_set_geometry(NULL) %>% as_tibble() %>% select(P2_UID) %>% pull(P2_UID)
+  # 
+  # P1_overlapping_and_intersected_polys = P1_ORIG %>% filter(P1_UID %in% P1_UID_overlaps)
+  # P2_overlapping_and_intersected_polys = P2_ORIG %>% filter(P2_UID %in% P2_UID_overlaps)
+  
+  
+  
+  # mapview(P1_overlapping_and_intersected_polys)
+  # mapview(P2_overlapping_and_intersected_polys)
+  
+  OUT = list(P1_overlapping_and_intersected_polys, P2_overlapping_and_intersected_polys)
+  
+  
+}
+
+
+
+ELF_2012_TO_KEEP_PROPER_tow_LIMITING_SOILS_PODZOLS = P1_overlapping_and_intersected_polys %>% 
+  group_by(P1_UID) %>% 
+  summarise()
+
+
+
+ELF_2012_TO_KEEP_PROPER_tow_LIMITING_SOILS_PODZOLS_ffn = paste0(datadir, "MERGING_ELF/ELF_2012_TO_KEEP_PROPER_tow_LIMITING_SOILS_PODZOLS.shp")
+st_write(ELF_2012_TO_KEEP_PROPER_tow_LIMITING_SOILS_PODZOLS, ELF_2012_TO_KEEP_PROPER_tow_LIMITING_SOILS_PODZOLS_ffn, append = F)
+
+LIMITING_SOILS_PODZOLS_tow_ELF_2012_TO_KEEP_PROPER = P2_overlapping_and_intersected_polys %>% 
+  group_by(P2_UID) %>% 
+  summarise()
+
+
+
+
+LIMITING_SOILS_PODZOLS_tow_ELF_2012_TO_KEEP_PROPER_ffn = paste0(datadir, "MERGING_ELF/LIMITING_SOILS_PODZOLS_tow_ELF_2012_TO_KEEP_PROPER.shp")
+st_write(LIMITING_SOILS_PODZOLS_tow_ELF_2012_TO_KEEP_PROPER, LIMITING_SOILS_PODZOLS_tow_ELF_2012_TO_KEEP_PROPER_ffn, append = F)
+
+
+
+
+P2_overlaps_ix = which(lengths(P2_x_P1) > 0)
+length(P2_overlaps_ix)
+P2_overlaps = P2[P2_overlaps_ix]
+
+
+
+
+
+
+LIMITING_SOILS_PODZOLSxELF_2012_TO_KEEP_FINAL = ea_intersection(LIMITING_SOILS_PODZOLS, ELF_2012_TO_KEEP_FINAL,PC = Current_PC, ffn_stub = "LIMITING_SOILS_PODZOLSxELF_2012_TO_KEEP_FINAL", dn = datadir, parallel = T, ncore = 18, val = "both",filetype = "SHP",diff_opt = F )
+
+
+
+```
+

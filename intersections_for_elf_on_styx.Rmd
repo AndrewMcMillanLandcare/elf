@@ -1,0 +1,189 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+# Load Libraries
+
+```{r}
+
+
+
+Current_PC <- Sys.info()["nodename"]
+
+root = "/mnt/data/mcmillana/PRJ3597-MPI-ELF/"
+datadir = paste0(root, "data/")
+plotdir = paste0(root, "plot/")
+
+
+
+source("/home/mcmillana/code/R/utils/mcm_sp_utils.R")
+
+```
+
+```{r}
+
+LRI = ea_load("LUC")
+SMAP = ea_load("SMAP")
+FSL_NZGD49  = ea_load("FSL")
+
+CRS = st_crs(SMAP)
+FSL = FSL_NZGD49%>% st_transform(crs = CRS)
+
+
+SMAP_CMB = st_combine(SMAP)
+
+FSL_MINUS_SMAP = ea_intersection(FSL, SMAP,PC = Current_PC, ffn_stub = "FSL_MINUS_SMAP", dn = datadir, parallel = T, ncore = 32, val = "both",filetype = "SHP",diff_opt = T )
+
+```
+
+```{r}
+FSL_SMAP = st_read("/mnt/data/mcmillana/PRJ3597-MPI-ELF/data/SMAP_FSL_2022/SmapFSL polygons December 2022.shp")
+FSL_SMAP_minus_SMAP = FSL_SMAP %>% filter(Source != "smap")
+
+st_write(FSL_SMAP_minus_SMAP, paste0(datadir,"FSL_SMAP_minus_SMAP.shp" ), append=F)
+
+FSL_SMAP_minus_SMAP_centroids = st_centroid(FSL_SMAP_minus_SMAP)
+
+FSL_NZGD49  = ea_load("FSL")
+
+CRS = st_crs(FSL_SMAP)
+FSL = FSL_NZGD49%>% st_transform(crs = CRS) %>% 
+  mutate(POLY_UID = 1:nrow(.))
+
+# FSL_NOT_SMAP_bix = st_intersects(FSL, FSL_SMAP_minus_SMAP_centroids)
+
+FSL_ORIG_NO_SMAP = ea_intersection(FSL, FSL_SMAP_minus_SMAP, PC = Current_PC,ffn_stub = "FSL_ORIG_NO_SMAP", dn = datadir, parallel = T, ncore = 32, filetype = "SHP")
+
+
+SMAP = ea_load("SMAP")
+
+
+SMAP_NZSC = SMAP %>% select(NZSC) %>% mutate(SRC = "SMAP")
+FSL_ORIG_NO_SMAP_NZSC = FSL_ORIG_NO_SMAP %>% select(NZSC = NZSC_CLASS)%>% mutate(SRC = "FSL")
+
+SMAP_FSL_CMB_NZSC = SMAP_NZSC %>% bind_rows(FSL_ORIG_NO_SMAP_NZSC)
+st_write(SMAP_FSL_CMB_NZSC, paste0(datadir, "SMAP_FSL_CMB_NZSC.shp"), append = F)
+
+saline_classes = c("RFQ", "RFMQ", "WGFQ", "WGQ")
+
+SMAP_FSL_CMB_NZSC_FILT_SALINE = SMAP_FSL_CMB_NZSC %>% filter(NZSC %in% saline_classes)
+
+SMAP_FSL_CMB_NZSC_FILT_SALINE %>% pull(NZSC) %>% unique()
+
+mapview(SMAP_FSL_CMB_NZSC_FILT_SALINE)
+
+st_write(SMAP_FSL_CMB_NZSC_FILT_SALINE, paste0(datadir, "SMAP_FSL_CMB_NZSC_FILT_SALINE.shp"), append = F)
+
+```
+
+
+
+
+```{r}
+SMAP_FSL_CMB_NZSC = st_read(paste0(datadir, "SMAP_FSL_CMB_NZSC.shp"))
+
+LCDB = ea_load("LCDB")
+
+
+FSL_ORIG_NO_SMAP = ea_intersection(SMAP_FSL_CMB_NZSC, LCDB, PC = Current_PC,ffn_stub = "SMAP_FSL_CMB_NZSCxLCDB", dn = datadir, parallel = T, ncore = 32, filetype = "SHP")
+
+FSL_ORIG_NO_SMAPxLCDB = FSL_ORIG_NO_SMAP
+remove(FSL_ORIG_NO_SMAP)
+
+forest_classes = c("Broadleaved Indigenous Hardwoods", "Exotic Forest", "Indigenous Forest", "Deciduous Hardwoods", "Forest - Harvested")
+
+names(FSL_ORIG_NO_SMAPxLCDB)
+
+FSL_ORIG_NO_SMAPxLCDB %>% pull(NZSC) %>% unique()
+FSL_ORIG_NO_SMAPxLCDB %>% pull(Name_2018) %>% unique()
+
+FSL_ORIG_NO_SMAPxLCDB_filt = FSL_ORIG_NO_SMAPxLCDB %>% 
+ filter(substr(NZSC,1,1) == "Z" & (!(Name_2018 %in% forest_classes)))
+
+st_write(FSL_ORIG_NO_SMAPxLCDB_filt, paste0(datadir, "FSL_ORIG_NO_SMAPxLCDB_filt.shp"), append = F)
+
+FSL_ORIG_NO_SMAPxLCDB_filt = st_read(paste0(datadir, "FSL_ORIG_NO_SMAPxLCDB_filt.shp"))
+mapview(FSL_ORIG_NO_SMAPxLCDB_filt)
+```
+
+# Rename layer
+```{r}
+
+LIMITING_SOILS_PODZOLS = FSL_ORIG_NO_SMAPxLCDB_filt
+LIMITING_SOILS_PODZOLS_ffn = paste0(datadir, "LIMITING_SOILS_PODZOLS.shp")
+st_write(LIMITING_SOILS_PODZOLS, LIMITING_SOILS_PODZOLS_ffn, append = F)
+
+```
+
+```{r}
+LRI = ea_load("LUC")
+names(LRI)
+
+LRI %>% pull(rock) %>% unique()
+UM = LRI %>% filter(str_detect(rock, "Um"))
+mapview(UM)
+```
+
+
+# intersections
+```{r}
+
+
+ELF_2012_TO_KEEP_PROPERL_ffn = paste0(datadir,"ELF_2012_TO_KEEP_PROPER.shp")
+ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
+
+LIMITING_SOILS_PODZOLS_ffn = paste0(datadir, "LIMITING_SOILS_PODZOLS.shp")
+LIMITING_SOILS_PODZOLS = st_read( LIMITING_SOILS_PODZOLS_ffn)
+# 
+# A = mapview(ELF_2012_TO_KEEP_FINAL, col.regions = "blue", col = "blue")
+# B = mapview(LIMITING_SOILS_PODZOLS, col.regions = "pink", col = "pink")
+# 
+# A + B
+
+
+LIMITING_SOILS_PODZOLSxELF_2012_TO_KEEP_FINAL = ea_intersection(LIMITING_SOILS_PODZOLS, ELF_2012_TO_KEEP_FINAL, PC = Current_PC,ffn_stub = "LIMITING_SOILS_PODZOLSxELF_2012_TO_KEEP_FINAL", dn = datadir, parallel = T, ncore = 16, filetype = "SHP")
+
+
+NEW_IX = function(P1, P2){
+  
+  
+  
+  P1 = ELF_2012_TO_KEEP_FINAL
+  P2 = LIMITING_SOILS_PODZOLS
+  
+  P1 = P1 %>% mutate(P1_UID = 1:nrow(.)) %>% select(P1_UID, geometry)
+  P2 = P2 %>% mutate(P2_UID = 1:nrow(.)) %>% select(P2_UID, geometry)
+  
+  P1_x_P2 = st_intersects(P1,P2)
+  length(P1_x_P2)
+  
+  P1_overlaps_ix = which(lengths(P1_x_P2) > 0)
+  length(P1_overlaps_ix)
+  P1_overlaps = P1[P1_overlaps_ix,]
+  mapview(P1_overlaps)
+  
+  P2_x_P1 = st_intersects(P2,P1_overlaps)
+  length(P2_x_P1)
+  
+  P2_overlaps_ix = which(lengths(P2_x_P1) > 0)
+  length(P2_overlaps_ix)
+  P2_overlaps = P2[P2_overlaps_ix,]
+  mapview(P2_overlaps)
+  
+  
+  
+  P1xP2 = ea_intersection(P1_overlaps, P2, PC = Current_PC,ffn_stub = "P1xP2", dn = datadir, parallel = T, ncore = 16, filetype = "SHP")
+
+  
+  
+  
+  
+  
+}
+
+
+```
+
