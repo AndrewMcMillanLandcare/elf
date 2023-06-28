@@ -63,7 +63,14 @@ if (Current_PC == ""){
   rootDrive <- "C:/Users/McMillanAn/OneDrive - MWLR"
   elfdir = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
   GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
-  source("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/Rcode/mcm_sp_utils.R")  
+  source("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/Rcode/mcm_sp_utils.R") 
+  
+} else if (Current_PC == "PN-GEO04-W10"){
+  os <- "win10"
+  rootDrive <- "D:/Users/HerronK"
+  elfdir = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
+  #GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
+  source("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/Rcode/mcm_sp_utils.R")
 } else {
   rootDrive <- "D:/"
 }
