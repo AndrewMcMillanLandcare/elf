@@ -56,6 +56,7 @@ if (Current_PC == ""){
   rootDrive <- "/home/mcmillana/"
   elfdir = "/mnt/data/mcmillana/PRJ3597-MPI-ELF/"
   GeoSpatRoot = "/mnt/data/mcmillana/NZ-Geospatial-Data/"
+  source("/home/mcmillana/code/R/utils/mcm_sp_utils.R")  
   
 } else if (Current_PC == "L-8P30JW3") {
   os <- "win10"
@@ -135,7 +136,12 @@ ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
 L0 = ELF_2012_TO_KEEP_PROPER
 L1 = LIMITING_SOILS_PODZOLS
 
-L0xL1 = find_overlapping(L0,L1, datadir = paste0(elfdir, "DATA/MERGING_ELF/"), ffn_stub = "L0xL1") #551 seconds
+L0xL1 = find_overlapping(L0,L1, datadir = paste0(elfdir, "DATA/MERGING_ELF/"), ffn_stub = "L0xL1",ncore_rec = 72) 
+
+#515 sec on laptop 18 cores
+#248 seconds on Styx 18 cores
+#188 seconds on Styx 36 cores
+#175 seconds on Styx 72 cores
 
 LO_minus_L0xL1 = st_difference(L0, st_union(L0xL1))
 L1_minus_L0xL1 = st_difference(L1, st_union(L0xL1))
