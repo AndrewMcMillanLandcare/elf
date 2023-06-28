@@ -76,36 +76,65 @@ if (Current_PC == ""){
 ```
 
 # function: find_overlapping 
+
 ```{r}
 
-find_overlapping = function(L1, L2, datadir,  ffn_stub,ncore_rec = 18){
+merge_elf_layers = function(LA_INPUT, LB_INPUT, datadir,  ffn_stub_list, ncore_rec = 36){
   
   tic()
-  P1_ORIG =  L1 %>%  mutate(P1_UID = 1:nrow(.))
-  P2_ORIG =  L2 %>%  mutate(P2_UID = 1:nrow(.))
+  LA_ORIG =  LA_INPUT %>%  mutate(LA_UID = 1:nrow(.))
+  LB_ORIG =  LB_INPUT %>%  mutate(LB_UID = 1:nrow(.))
   
   
   
-  P1 = P1_ORIG  %>% select(P1_UID, geometry)
-  P2 = P2_ORIG %>% select(P2_UID, geometry)
+  LA = LA_ORIG  %>% select(LA_UID, geometry)
+  LB = LB_ORIG %>% select(LB_UID, geometry)
   
-  P1_x_P2 = st_intersects(P1,P2)
-  length(P1_x_P2)
+  LA_x_LB = st_intersects(LA,LB)
+  length(LA_x_LB)
   
-  P1_overlaps_ix = which(lengths(P1_x_P2) > 0)
-  length(P1_overlaps_ix)
-  P1_overlaps = P1[P1_overlaps_ix,]
+  LA_overlaps_ix = which(lengths(LA_x_LB) > 0)
+  length(LA_overlaps_ix)
+  LA_overlaps = LA[LA_overlaps_ix,]
   
   # tic()
   # P2_x_P1 = st_intersects(P2,P1_overlaps)
   # toc()
   # length(P2_x_P1)
   
-  P2xP1_overlaps = ea_intersection(P2, P1_overlaps,PC = Current_PC, ffn_stub = ffn_stub, dn = datadir, parallel = T, ncore = ncore_rec, val = "both",filetype = "SHP",diff_opt = F )
+  print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+  print("++++++++")
+  print("++++++++   merge_elf_layers     ++++++ ---> Spatial operation 1 of 3:  Intersection: LAxLB")
+  print("++++++++")
+  print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+  
+  LAxLB = ea_intersection(LB, LA_overlaps,PC = Current_PC, ffn_stub = ffn_stub_list[1], dn = datadir, parallel = T, ncore = ncore_rec, val = "both",diff_opt = F )
+  
+  LAxLB_unn = st_union(LAxLB)
+  
+  print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+  print("++++++++")
+  print("++++++++   merge_elf_layers     ++++++ ---> Spatial operation 2 of 3:  Differencing: LA_minus_LAxLB")
+  print("++++++++")
+  print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+  
+  LA_minus_LAxLB = ea_intersection(LB, LBxLA_unn,PC = Current_PC, ffn_stub = ffn_stub_list[2], dn = datadir, parallel = T, ncore = ncore_rec, val = "P1",filetype = "SHP",diff_opt = T )
+  
+  print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+  print("++++++++")
+  print("++++++++   merge_elf_layers     ++++++ ---> Spatial operation 3 of 3:  Differencing: LB_minus_LAxLB")
+  print("++++++++")
+  print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+  
+  
+  LB_minus_LAxLB = ea_intersection(LB, LBxLA_unn,PC = Current_PC, ffn_stub = ffn_stub_list[3], dn = datadir, parallel = T, ncore = ncore_rec, val = "P1",filetype = "SHP",diff_opt = T )
+  
+  
+  
   
   print(toc())
   
-  return(P2xP1_overlaps)
+  OUT = list(LAxLB, LA_minus_LAxLB, LB_minus_LAxLB)
 }
 
 ```
@@ -128,10 +157,12 @@ Approach for merging a new layer Lb into the exisiting layer La
 ```{r}
 
 
+elf_merge_dn = paste0(elfdir, "DATA/MERGING_ELF/")
+
 LIMITING_SOILS_PODZOLS_ffn = paste0(elfdir,"DATA/SOIL_Limitation_layers/finished_unmerged_layers/LIMITING_SOILS_PODZOLS.shp")
 LIMITING_SOILS_PODZOLS = st_read(LIMITING_SOILS_PODZOLS_ffn)
 
-ELF_2012_TO_KEEP_PROPER_ffn = paste0(elfdir, "DATA/MERGING_ELF/ELF_2012_TO_KEEP_PROPER.shp")
+ELF_2012_TO_KEEP_PROPER_ffn = paste0(elf_merge_dn,"ELF_2012_TO_KEEP_PROPER.shp")
 ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
 
 
@@ -139,10 +170,11 @@ ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
 L0 = ELF_2012_TO_KEEP_PROPER
 L1 = LIMITING_SOILS_PODZOLS
 
-L0xL1 = find_overlapping(L0,L1, datadir = paste0(elfdir, "DATA/MERGING_ELF/"), ffn_stub = "L0xL1") #551 seconds
+ffn_stub_curr = "L0xL1"
 
-LO_minus_L0xL1 = st_difference(L0, st_union(L0xL1))
-L1_minus_L0xL1 = st_difference(L1, st_union(L0xL1))
+ffn_stub_list = c("L0xL1", "L0_minus_L0xL1", "L1_minus_L0xL1")
+
+L0xL1 = merge_elf_layers(L0,L1, datadir = elf_merge_dn, ffn_stub_list = ffn_stub_list,ncore_rec = 36) #551 seconds
 
 
 ```
