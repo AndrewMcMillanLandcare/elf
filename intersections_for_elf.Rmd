@@ -33,7 +33,8 @@ library(terra)
 
 Current_PC <- Sys.info()["nodename"]
 
-root = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
+if (Current_PC == "")
+  root = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
 datadir = paste0(root, "DATA/")
 plotdir = paste0(root, "plot/")
 
@@ -260,65 +261,66 @@ find_overlapping = function(L1, L2){
   
   P2xP1_overlaps = ea_intersection(P2, P1_overlaps,PC = Current_PC, ffn_stub = "P2xP1_overlaps", dn = datadir, parallel = T, ncore = 18, val = "both",filetype = "SHP",diff_opt = F )
   
-  
-  BOX = st_read(paste0(datadir, "MERGING_ELF/ELF_TEST_BOX.shp"))
-  mapview(BOX)
-  
-  
-  #Testing st_difference on the box
-  
-  ELF_2012_TO_KEEP_PROPER_BOX = st_crop(ELF_2012_TO_KEEP_PROPER, BOX)
-  LIMITING_SOILS_PODZOLS_BOX = st_crop(LIMITING_SOILS_PODZOLS, BOX)
-  P2xP1_overlaps_BOX = st_crop(P2xP1_overlaps, BOX)
-  
-  ELF_2012_TO_KEEP_PROPER_BOX_not_ol = st_difference(ELF_2012_TO_KEEP_PROPER_BOX, st_union(P2xP1_overlaps_BOX))
-  LIMITING_SOILS_PODZOLS_BOX_not_ol = st_difference(LIMITING_SOILS_PODZOLS_BOX, st_union(P2xP1_overlaps_BOX))
-  mapview(ELF_2012_TO_KEEP_PROPER_BOX_not_ol)
-  
-  #K test
-  #ELF_2012_TO_KEEP_PROPER_BOX_not_ol = gDifference(ELF_2012_TO_KEEP_PROPER_BOX, LIMITING_SOILS_PODZOLS_BOX)
-  
-  
-  A = mapview(ELF_2012_TO_KEEP_PROPER_BOX_not_ol, col.region = "pink")
-  P = mapview(LIMITING_SOILS_PODZOLS_BOX)
-  B = mapview(LIMITING_SOILS_PODZOLS_BOX_not_ol, col.region = "blue")
-  C = mapview(P2xP1_overlaps_BOX, col.region = "green")
-
-  A+B
-  A+B+C
-  
-  # Scaling it up to NZ to see if it crashes / takes hours :P
-  
-  ELF_2012_TO_KEEP_PROPER_NO_PODZOL_OVERLAP = st_difference(ELF_2012_TO_KEEP_PROPER, st_union(P2xP1_overlaps))
-  LIMITING_SOILS_PODZOLS_NO_ELF_OVERLAP = st_difference(LIMITING_SOILS_PODZOLS, st_union(P2xP1_overlaps))
-  
-  P1_ORIG_nogeo = P1_ORIG %>% st_set_geometry(NULL)
-  
-  P2xP1_overlaps_fullelf = P2xP1_overlaps %>% 
-    left_join(P1_ORIG_nogeo, by = "P1_UID") %>% 
-    mutate(
-      LIMITATION = "Multiple",
-      PODZOLS = 1)
-  
-  
-  
-  # 
-  # 
-  # P1_UID_overlaps = P2xP1_overlaps %>% st_set_geometry(NULL) %>% as_tibble() %>% select(P1_UID) %>% pull(P1_UID)
-  # P2_UID_overlaps = P2xP1_overlaps %>% st_set_geometry(NULL) %>% as_tibble() %>% select(P2_UID) %>% pull(P2_UID)
-  # 
-  # P1_overlapping_and_intersected_polys = P1_ORIG %>% filter(P1_UID %in% P1_UID_overlaps)
-  # P2_overlapping_and_intersected_polys = P2_ORIG %>% filter(P2_UID %in% P2_UID_overlaps)
-  
-  
-  
-  # mapview(P1_overlapping_and_intersected_polys)
-  # mapview(P2_overlapping_and_intersected_polys)
-  
-  OUT = list(P1_overlapping_and_intersected_polys, P2_overlapping_and_intersected_polys)
-  
-  
 }
+
+BOX = st_read(paste0(datadir, "MERGING_ELF/ELF_TEST_BOX.shp"))
+mapview(BOX)
+
+
+#Testing st_difference on the box
+
+ELF_2012_TO_KEEP_PROPER_BOX = st_crop(ELF_2012_TO_KEEP_PROPER, BOX)
+LIMITING_SOILS_PODZOLS_BOX = st_crop(LIMITING_SOILS_PODZOLS, BOX)
+P2xP1_overlaps_BOX = st_crop(P2xP1_overlaps, BOX)
+
+ELF_2012_TO_KEEP_PROPER_BOX_not_ol = st_difference(ELF_2012_TO_KEEP_PROPER_BOX, st_union(P2xP1_overlaps_BOX))
+LIMITING_SOILS_PODZOLS_BOX_not_ol = st_difference(LIMITING_SOILS_PODZOLS_BOX, st_union(P2xP1_overlaps_BOX))
+mapview(ELF_2012_TO_KEEP_PROPER_BOX_not_ol)
+
+#K test
+#ELF_2012_TO_KEEP_PROPER_BOX_not_ol = gDifference(ELF_2012_TO_KEEP_PROPER_BOX, LIMITING_SOILS_PODZOLS_BOX)
+
+
+A = mapview(ELF_2012_TO_KEEP_PROPER_BOX_not_ol, col.region = "pink")
+P = mapview(LIMITING_SOILS_PODZOLS_BOX)
+B = mapview(LIMITING_SOILS_PODZOLS_BOX_not_ol, col.region = "blue")
+C = mapview(P2xP1_overlaps_BOX, col.region = "green")
+
+A+B
+A+B+C
+
+# Scaling it up to NZ to see if it crashes / takes hours :P
+
+ELF_2012_TO_KEEP_PROPER_NO_PODZOL_OVERLAP = st_difference(ELF_2012_TO_KEEP_PROPER, st_union(P2xP1_overlaps))
+LIMITING_SOILS_PODZOLS_NO_ELF_OVERLAP = st_difference(LIMITING_SOILS_PODZOLS, st_union(P2xP1_overlaps))
+
+P1_ORIG_nogeo = P1_ORIG %>% st_set_geometry(NULL)
+
+P2xP1_overlaps_fullelf = P2xP1_overlaps %>% 
+  left_join(P1_ORIG_nogeo, by = "P1_UID") %>% 
+  mutate(
+    LIMITATION = "Multiple",
+    PODZOLS = 1)
+
+
+
+# 
+# 
+# P1_UID_overlaps = P2xP1_overlaps %>% st_set_geometry(NULL) %>% as_tibble() %>% select(P1_UID) %>% pull(P1_UID)
+# P2_UID_overlaps = P2xP1_overlaps %>% st_set_geometry(NULL) %>% as_tibble() %>% select(P2_UID) %>% pull(P2_UID)
+# 
+# P1_overlapping_and_intersected_polys = P1_ORIG %>% filter(P1_UID %in% P1_UID_overlaps)
+# P2_overlapping_and_intersected_polys = P2_ORIG %>% filter(P2_UID %in% P2_UID_overlaps)
+
+
+
+# mapview(P1_overlapping_and_intersected_polys)
+# mapview(P2_overlapping_and_intersected_polys)
+
+OUT = list(P1_overlapping_and_intersected_polys, P2_overlapping_and_intersected_polys)
+
+
+
 
 
 

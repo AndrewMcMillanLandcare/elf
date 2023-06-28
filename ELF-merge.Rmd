@@ -1,0 +1,145 @@
+---
+title: "ELF-MERGE"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+
+
+
+library(sf)
+library(tidyverse)
+# library(mapview)
+library(cowplot)
+library(lubridate)
+# library(xlsx)
+library(readxl)
+library(rmapshaper)
+library(mapview)
+# library(rmapshaper)
+library(plotly)
+library(tictoc)
+library(parallel)
+library(doParallel)
+library(terra)
+library(openxlsx)
+library(scales)
+library(purrr)
+library(furrr)
+library(terra)
+
+Current_PC <- Sys.info()["nodename"]
+
+if (Current_PC == ""){
+  root = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
+  datadir = paste0(root, "DATA/")
+  plotdir = paste0(root, "plot/")
+
+
+} else if (Current_PC == "EANZ-DT01-Linux") {
+  os <- "linux"
+  rootDrive <- "/media/andrew/HDD data/"
+  EDrive <- "/media/andrew/E-DRIVE-SSD/"
+  GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
+  
+} else if (Current_PC == "EANZ-DT01") {
+  os <- "win10"
+  rootDrive <- "D:/"
+  EDrive <- "E:/"
+  GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/" #check this!
+  
+} else if (Current_PC == "styx") {
+  os <- "linux"
+  rootDrive <- "/home/mcmillana/"
+  elfdir = "/mnt/data/mcmillana/PRJ3597-MPI-ELF/"
+  GeoSpatRoot = "/mnt/data/mcmillana/NZ-Geospatial-Data/"
+  
+} else if (Current_PC == "L-8P30JW3") {
+  os <- "win10"
+  rootDrive <- "C:/Users/McMillanAn/OneDrive - MWLR"
+  elfdir = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
+  GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
+  source("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/Rcode/mcm_sp_utils.R")  
+} else {
+  rootDrive <- "D:/"
+}
+
+
+
+```
+
+# function: find_overlapping 
+```{r}
+
+find_overlapping = function(L1, L2, datadir,  ffn_stub,ncore_rec = 18){
+  
+  tic()
+  P1_ORIG =  L1 %>%  mutate(P1_UID = 1:nrow(.))
+  P2_ORIG =  L2 %>%  mutate(P2_UID = 1:nrow(.))
+  
+  
+  
+  P1 = P1_ORIG  %>% select(P1_UID, geometry)
+  P2 = P2_ORIG %>% select(P2_UID, geometry)
+  
+  P1_x_P2 = st_intersects(P1,P2)
+  length(P1_x_P2)
+  
+  P1_overlaps_ix = which(lengths(P1_x_P2) > 0)
+  length(P1_overlaps_ix)
+  P1_overlaps = P1[P1_overlaps_ix,]
+  
+  # tic()
+  # P2_x_P1 = st_intersects(P2,P1_overlaps)
+  # toc()
+  # length(P2_x_P1)
+  
+  P2xP1_overlaps = ea_intersection(P2, P1_overlaps,PC = Current_PC, ffn_stub = ffn_stub, dn = datadir, parallel = T, ncore = ncore_rec, val = "both",filetype = "SHP",diff_opt = F )
+  
+  print(toc())
+  
+  return(P2xP1_overlaps)
+}
+
+```
+
+LAYERS
+
+L0 : ELF_2012_KEEP        : /DATA/SOIL_Limitation_layers/finished_unmerged_layers/ELF_2012_TO_KEEP_PROPER.shp
+L1 : PODZOLS              : /DATA/SOIL_Limitation_layers/finished_unmerged_layers/LIMITING_SOILS_PODZOLS.shp
+L2 : TREELINE             : /DATA/SOIL_Limitation_layers/finished_unmerged_layers/NZ-High-Alt-Treeline-layer-02_23_v2.gpkg
+L3 : TOO_WET              : /DATA/SOIL_Limitation_layers/finished_unmerged_layers/LIMITING_SOILS_TOO_WET.shp
+L4 : TOO_DRY              : /DATA/SOIL_Limitation_layers/finished_unmerged_layers/LIMITING_SOILS_TOO_DRY.shp
+L5 : SALINE               : /DATA/SOIL_Limitation_layers/finished_unmerged_layers/SMAP_FSL_CMB_NZSC_FILT_SALINE.shp
+
+Approach for merging a new layer Lb into the exisiting layer La
+
+1. LaxLb: Get Intersection LaxLb. These are the polygons that will have a minimum of two limiting factors (at least one from La and exactly one from Lb)
+2. La_minus_LaxLb: Get the difference between La and LaxLb. These are the polygons from the old layer that remain
+3. Lb_minus_LaxLb: Get the difference between Lb and LaxLb. These are the polygons from the new layer that will be merged and extend the area of limitation
+
+```{r}
+
+
+LIMITING_SOILS_PODZOLS_ffn = paste0(elfdir,"DATA/SOIL_Limitation_layers/finished_unmerged_layers/LIMITING_SOILS_PODZOLS.shp")
+LIMITING_SOILS_PODZOLS = st_read(LIMITING_SOILS_PODZOLS_ffn)
+
+ELF_2012_TO_KEEP_PROPER_ffn = paste0(elfdir, "DATA/MERGING_ELF/ELF_2012_TO_KEEP_PROPER.shp")
+ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
+
+
+
+L0 = ELF_2012_TO_KEEP_PROPER
+L1 = LIMITING_SOILS_PODZOLS
+
+L0xL1 = find_overlapping(L0,L1, datadir = paste0(elfdir, "DATA/MERGING_ELF/"), ffn_stub = "L0xL1") #551 seconds
+
+LO_minus_L0xL1 = st_difference(L0, st_union(L0xL1))
+L1_minus_L0xL1 = st_difference(L1, st_union(L0xL1))
+
+
+```
+
