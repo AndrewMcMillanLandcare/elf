@@ -14,7 +14,7 @@ editor_options:
 Current_PC <- Sys.info()["nodename"]
 
 root = "/mnt/data/mcmillana/PRJ3597-MPI-ELF/"
-datadir = paste0(root, "data/")
+datadir = paste0(root, "DATA/")
 plotdir = paste0(root, "plot/")
 
 
@@ -79,6 +79,72 @@ st_write(SMAP_FSL_CMB_NZSC_FILT_SALINE, paste0(datadir, "SMAP_FSL_CMB_NZSC_FILT_
 
 ```
 
+# Generate Dry Layer 
+
+```{r}
+
+
+
+SMAP_FSL_CMB_NZSC = st_read(paste0(datadir, "SMAP_FSL_CMB_NZSC/SMAP_FSL_CMB_NZSC.shp"))
+MAR = rast(paste0(datadir, "nz_mar/RAIN_NZTM.tif"))
+
+DRY_NZSC_list = c("S", "WX", "RXA", "RXT")
+
+SMAP_FSL_CMB_NZSC %>% pull(NZSC) %>% unique() %>% sort()
+
+SMAP_FSL_CMB_NZSC_DRY = SMAP_FSL_CMB_NZSC %>% 
+  filter(
+    substr(NZSC,1,1) == "S" |
+      NZSC == "WX" |
+      NZSC == "RXA" |
+      NZSC == "RXT" )
+      
+SMAP_FSL_CMB_NZSC_DRY %>% pull(NZSC) %>% unique() %>% sort()
+  
+
+#read a polygon for the North Island
+NI_poly_ffn = paste0(datadir,"NI.gpkg")
+NI_poly = st_read(NI_poly_ffn)
+
+#read a polygon for the North Island
+SI_poly_ffn = paste0(AL_dn,"SI.gpkg")
+SI_poly = st_read(SI_poly_ffn)
+
+SMAP_FSL_CMB_NZSC_DRY_w_UID = SMAP_FSL_CMB_NZSC_DRY %>% mutate(UID = 1:nrow(.))
+
+SMAP_FSL_CMB_NZSC_DRY_x_NI_poly_ix = which(lengths(st_intersects(SMAP_FSL_CMB_NZSC_DRY_w_UID,NI_poly )) >0)
+
+NI_UID = SMAP_FSL_CMB_NZSC_DRY_w_UID$UID[SMAP_FSL_CMB_NZSC_DRY_x_NI_poly_ix]
+
+
+SMAP_FSL_CMB_NZSC_DRY_w_UID_w_ISLAND = SMAP_FSL_CMB_NZSC_DRY_w_UID %>% 
+  mutate(ISLAND = ifelse(UID %in% NI_UID, "NI", "SI"))
+
+mapview(SMAP_FSL_CMB_NZSC_DRY_w_UID_w_ISLAND, zcol="ISLAND")
+
+
+library(exactextractr)
+SMAP_FSL_CMB_NZSC_DRY_w_UID_w_ISLAND_RF = exact_extract(MAR, SMAP_FSL_CMB_NZSC_DRY_w_UID_w_ISLAND, "mean")
+
+SMAP_FSL_CMB_NZSC_DRY_w_UID_w_ISLAND_w_RF = SMAP_FSL_CMB_NZSC_DRY_w_UID_w_ISLAND %>% 
+  mutate(MAR = SMAP_FSL_CMB_NZSC_DRY_w_UID_w_ISLAND_RF)
+
+SMAP_FSL_CMB_NZSC_DRY_w_UID_w_ISLAND_w_RF_filt = SMAP_FSL_CMB_NZSC_DRY_w_UID_w_ISLAND_w_RF %>% 
+  filter(
+    ( (ISLAND=="NI" & MAR < 800) | (ISLAND == "SI" & MAR < 600) )
+  )
+  
+
+
+mapview(SMAP_FSL_CMB_NZSC_DRY_w_UID_w_ISLAND_w_RF, zcol = "MAR")
+mapview(SMAP_FSL_CMB_NZSC_DRY_w_UID_w_ISLAND_w_RF_filt, zcol = "MAR")
+
+SOIL_LIMITATIONS_TOO_DRY = SMAP_FSL_CMB_NZSC_DRY_w_UID_w_ISLAND_w_RF_filt
+SOIL_LIMITATIONS_TOO_DRY_ffn = paste0(datadir,"SOIL_Limitation_layers/finished_unmerged_layers/SOIL_LIMITATIONS_TOO_DRY.shp")
+st_write(SOIL_LIMITATIONS_TOO_DRY, SOIL_LIMITATIONS_TOO_DRY_ffn, append=F)
+
+
+```
 
 
 

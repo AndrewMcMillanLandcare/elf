@@ -1,0 +1,216 @@
+---
+title: "ELF-clean-and-QAQC"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+
+Last updated 29/06/23 06:28
+
+# libraries and folders
+
+
+```{r}
+
+
+
+
+library(sf)
+library(tidyverse)
+# library(mapview)
+library(cowplot)
+library(lubridate)
+# library(xlsx)
+library(readxl)
+library(rmapshaper)
+library(mapview)
+# library(rmapshaper)
+library(plotly)
+library(tictoc)
+library(parallel)
+library(doParallel)
+library(terra)
+library(openxlsx)
+library(scales)
+library(purrr)
+library(furrr)
+library(terra)
+
+Current_PC <- Sys.info()["nodename"]
+
+if (Current_PC == ""){
+  root = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
+  datadir = paste0(root, "DATA/")
+  plotdir = paste0(root, "plot/")
+
+
+} else if (Current_PC == "EANZ-DT01-Linux") {
+  os <- "linux"
+  rootDrive <- "/media/andrew/HDD data/"
+  EDrive <- "/media/andrew/E-DRIVE-SSD/"
+  GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
+  
+} else if (Current_PC == "EANZ-DT01") {
+  os <- "win10"
+  rootDrive <- "D:/"
+  EDrive <- "E:/"
+  GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/" #check this!
+  
+} else if (Current_PC == "styx") {
+  os <- "linux"
+  rootDrive <- "/home/mcmillana/"
+  elfdir = "/mnt/data/mcmillana/PRJ3597-MPI-ELF/"
+  GeoSpatRoot = "/mnt/data/mcmillana/NZ-Geospatial-Data/"
+  source("/home/mcmillana/code/R/utils/mcm_sp_utils.R") 
+  
+} else if (Current_PC == "L-8P30JW3") {
+  os <- "win10"
+  rootDrive <- "C:/Users/McMillanAn/OneDrive - MWLR"
+  elfdir = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
+  GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
+  source("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/Rcode/mcm_sp_utils.R")  
+} else {
+  rootDrive <- "D:/"
+}
+
+elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF/")
+
+```
+
+
+# read old and new elf layers and box
+```{r}
+gc()
+ELF_2023_PREFINAL_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL.gpkg")
+ELF_2023_PREFINAL = st_read(ELF_2023_PREFINAL_ffn)
+
+ELF_2012_ffn = paste0(elfdir, "DATA/mfe-environmental-limiting-factors-2012-SHP/environmental-limiting-factors-2012.shp")
+ELF_2012 = st_read(ELF_2012_ffn) %>% 
+  filter(!LIMITATION=="None")
+
+# ELF_TEST_BOX_ffn = paste0(elf_merge_dir,"ELF_TEST_BOX.shp" )
+ELF_TEST_BOX_ffn = paste0(elfdir,"ELF-LAYER-2023-PREFINAL/BIG_BOX.shp")
+ELF_TEST_BOX = st_read(ELF_TEST_BOX_ffn)
+
+ELF_2012_CLIP = st_crop(ELF_2012, ELF_TEST_BOX)
+```
+
+#Clean Clip
+
+```{r}
+ELF_2023_PREFINAL_CLIP = st_crop(ELF_2023_PREFINAL, ELF_TEST_BOX) %>% 
+  mutate(LIM_TYPE=
+           strtoi(
+    paste0(
+      as.character(DRY),as.character(FROST_FLAT),as.character(SALINE),as.character(ULTRAMAFIC),
+      as.character(HOT_GEOTHM),as.character(PAKIHI),as.character(GUMLANDS),as.character(SALT_SPRAY),
+      as.character(WET),as.character(COLD_BASIN),as.character(PODZOLS),as.character(TREELINE)
+    ), base=2)
+  ) %>% 
+ea_id_area() %>% 
+  filter(POLY_AREA_HA > 1)
+
+mapview(ELF_2023_PREFINAL_CLIP, zcol = "LIM_TYPE")
+
+ELF_2023_PREFINAL_CLIP_SMY = ELF_2023_PREFINAL_CLIP %>% 
+   group_by(LIM_TYPE) %>% 
+  summarise(across(c(1:14,16), first)) %>% 
+  st_remove_holes(1.5*1e4) %>% 
+  st_union(by_feature = T, is_coverage = T)
+  
+mapview(ELF_2023_PREFINAL_CLIP_SMY, zcol = "LIM_TYPE")
+
+```
+
+#Clean Full
+
+
+```{r}
+ELF_2023_PREFINAL_FULL_CLEAN = ELF_2023_PREFINAL %>% 
+  mutate(LIM_TYPE=
+           strtoi(
+    paste0(
+      as.character(DRY),as.character(FROST_FLAT),as.character(SALINE),as.character(ULTRAMAFIC),
+      as.character(HOT_GEOTHM),as.character(PAKIHI),as.character(GUMLANDS),as.character(SALT_SPRAY),
+      as.character(WET),as.character(COLD_BASIN),as.character(PODZOLS),as.character(TREELINE)
+    ), base=2)
+  ) %>% 
+ea_id_area() %>% 
+  filter(POLY_AREA_HA > 1)
+
+mapview(ELF_2023_PREFINAL_FULL_CLEAN, zcol = "LIM_TYPE")
+
+ELF_2023_PREFINAL_FULL_CLEAN_SMY = ELF_2023_PREFINAL_FULL_CLEAN %>% 
+   group_by(LIM_TYPE) %>% 
+  summarise(across(c(1:14,16), first)) %>% 
+  st_remove_holes(1.5*1e4) 
+
+# %>% 
+#   st_union(by_feature = T, is_coverage = T)
+  
+ELF_2023_PREFINAL_FULL_CLEAN_SMY_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_SMY.gpkg")
+
+st_write(ELF_2023_PREFINAL_FULL_CLEAN_SMY, ELF_2023_PREFINAL_FULL_CLEAN_SMY_ffn, append = T)
+
+
+mapview(ELF_2023_PREFINAL_FULL_CLEAN_SMY, zcol = "LIM_TYPE")
+
+```
+
+
+```{r}
+ELF_2012 %>% pull(LIMITATION) %>% unique()
+
+
+
+ELF_2012_CLIP_CMB = st_combine(ELF_2012_CLIP)
+ELF_2023_PREFINAL_CLIP_CMB = st_combine(ELF_2023_PREFINAL_CLIP)
+
+ELF_2012_CLIP_UNN = st_union(ELF_2012_CLIP)
+ELF_2023_PREFINAL_CLIP_UNN = st_union(ELF_2023_PREFINAL_CLIP)
+
+A = mapview(ELF_2012_CLIP, col.region = "blue")
+B = mapview(ELF_2023_PREFINAL_CLIP, col.region = "orange")
+
+A + B
+
+C = mapview(ELF_2012_CLIP_CMB, col.region = "blue")
+D = mapview(ELF_2023_PREFINAL_CLIP_CMB, col.region = "orange")
+
+C + D
+
+G = mapview(ELF_2012_CLIP_UNN, col.region = "blue")
+H = mapview(ELF_2023_PREFINAL_CLIP_UNN, col.region = "orange")
+
+G + H
+
+ELF_2012_SYMDIFF_ELF_2023 = st_sym_difference(ELF_2012_CLIP, ELF_2023_PREFINAL_CLIP)
+
+qm(ELF_2012_SYMDIFF_ELF_2023)
+ggplot(ELF_2012_SYMDIFF_ELF_2023) + geom_sf()
+plot(ELF_2012_SYMDIFF_ELF_2023)
+mapview(ELF_2012_SYMDIFF_ELF_2023)
+
+```
+
+Try the contains_properly
+
+```{r}
+library(nngeo)
+
+ELF_2023_PREFINAL_CLIP_w_AREA = ELF_2023_PREFINAL_CLIP %>% 
+  ea_id_area()
+
+ELF_2023_PREFINAL_CLIP_NO_SMALL = ELF_2023_PREFINAL_CLIP_w_AREA %>% 
+  filter(POLY_AREA_HA > .5)
+
+ELF_2023_PREFINAL_CLIP_NO_SMALL_FILLED_HOLES = st_remove_holes(ELF_2023_PREFINAL_CLIP_NO_SMALL, 9000)
+
+A = mapview(ELF_2023_PREFINAL_CLIP_w_AREA, col.region = "grey")
+B=mapview(ELF_2023_PREFINAL_CLIP_NO_SMALL, col.region = "green")
+C=mapview(ELF_2023_PREFINAL_CLIP_NO_SMALL_FILLED_HOLES, col.region="orange")
+
+C + B + A
+```
+
