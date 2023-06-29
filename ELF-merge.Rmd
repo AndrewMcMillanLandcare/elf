@@ -74,7 +74,7 @@ if (Current_PC == ""){
   rootDrive <- "D:/"
 }
 
-
+elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF/")
 
 ```
 
@@ -86,12 +86,51 @@ merge_elf_layers = function(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_
   
   #----test input data
   elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF/")
-  ffn_stub_list = c("L0xL1", "L0_minus_L0xL1", "L1_minus_L0xL1", "L0_L1_MERGED")
-  LA_INPUT = ELF_2012_TO_KEEP_PROPER
-  LB_INPUT = LIMITING_SOILS_PODZOLS
+  
+  
+  
+  testmode = F
+  
+  if (testmode){
+  #Merge PODZOLS into ELF_TO_KEEP to create the merged layer "L0_L1_MERGED"
+ 
+#    LIMITING_SOILS_PODZOLS_ffn = paste0(elfdir,"DATA/SOIL_Limitation_layers/finished_unmerged_layers/LIMITING_SOILS_PODZOLS.shp")
+# LIMITING_SOILS_PODZOLS = st_read(LIMITING_SOILS_PODZOLS_ffn)
+# 
+# ELF_2012_TO_KEEP_PROPER_ffn = paste0(elf_merge_dir,"ELF_2012_TO_KEEP_PROPER.shp")
+# ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
+# 
+# 
+#   ffn_stub_list = c("L0xL1", "L0_minus_L0xL1", "L1_minus_L0xL1", "L0_L1_MERGED")
+#   LA_INPUT = ELF_2012_TO_KEEP_PROPER
+#   LB_INPUT = LIMITING_SOILS_PODZOLS
+#   LB_LIM_FIELDNAME = "PODZOLS"
+#   LB_LIMITATION_descr = "Substrate Podzols"
+#   
+  #Merge TREELINE into L0_L1_MERGED to create the merged layer "L1_L2_MERGED"
+
+  ffn_stub_list = c("L1xL2", "L1_minus_L1xL2", "L2_minus_L1xL2", "L1_L2_MERGED")
+  LA_INPUT = st_read(paste0(elf_merge_dir, "L0_L1_MERGED.gpkg"))
+  LB_INPUT = st_read(paste0(elf_merge_dir, "NZ-High-Alt-Treeline-layer-02_23_v2.gpkg"))
+  mapview(LB_INPUT)
+  LB_LIM_FIELDNAME = "TREELINE"
+  LB_LIMITATION_descr = "Too Cold Near Treeline"
+
+   #Merge TOO_WET into L1_L2_MERGED to create the merged layer "L1_L2_MERGED"
+  
+  # ffn_stub_list = c("L2xL3", "L3_minus_L2xL3", "L2_minus_L2xL3", "L2_L3_MERGED")
+  # LA_INPUT = st_read(paste0(elf_merge_dir, "L1_L2_MERGED.gpkg"))
+  # LB_INPUT = st_read(paste0(elfdir,"DATA/SOIL_Limitation_layers/finished_unmerged_layers/SOIL_LIMITATIONS_TOO_WET.shp"))
+  # mapview(LB_INPUT)
+  # LB_LIM_FIELDNAME = "WET"
+  # LB_LIMITATION_descr = "Too Wet"
+  
   ncore_rec = 36
-  LB_LIM_FIELDNAME = "PODZOLS"
-  LB_LIMITATION_descr = "Substrate Podzols"
+  
+  }
+  
+  
+ 
   #------------------
   
   tic("whole function")
@@ -100,8 +139,14 @@ merge_elf_layers = function(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_
   
   
   
-  LA = LA_ORIG  %>% select(LA_UID, geometry)
-  LB = LB_ORIG %>% select(LB_UID, geometry)
+  LA = LA_ORIG  %>% select(LA_UID, geometry=contains("geom"))
+  LB = LB_ORIG  %>% select(LB_UID, geometry=contains("geom"))
+  
+  # if (LB_LIM_FIELDNAME == "TREELINE"){
+  #     LB = LB_ORIG %>% select(LB_UID, geometry = geom)
+  #   }else{
+  #     LB = LB_ORIG %>% select(LB_UID, geometry)
+  #   }
   
   LA_x_LB = st_intersects(LA,LB)
   length(LA_x_LB)
@@ -176,27 +221,46 @@ merge_elf_layers = function(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_
       PODZOLS =0,
       TREELINE=0) %>% 
     mutate(
+      LIMITED = 1,
       !!LB_LIM_FIELDNAME := 1,
       LIMITATION = LB_LIMITATION_descr
     ) 
-      
+    
+  # mapview(LAxLB_w_attr, zcol = "LIMITATION", alpha =0 )
+  # mapview(LA_minus_LAxLB_w_attr, zcol = "LIMITATION", alpha =0 )
+  # mapview(LB_minus_LAxLB_w_attr, zcol = "LIMITATION", alpha =0 )
   
   # Step 5 - Bind the three sets of data together, remove the UID and save.
   
   LA_LB_MERGED = bind_rows(LAxLB_w_attr, LA_minus_LAxLB_w_attr, LB_minus_LAxLB_w_attr) %>% 
     select(!contains("UID"))
 
+  # names(LA_LB_MERGED)
+  
+  # LA_LB_MERGED %>% filter(LIMITATION == "Multiple" & PODZOLS == 1)
+  
   Length_non_valid = length(which(!st_is_valid(LA_LB_MERGED)))
+  
+  AREA_LA = calc_tot_area(LA)/1e3
+  AREA_LB = calc_tot_area(LB)/1e3
+  AREA_LAxLB = calc_tot_area(LAxLB)/1e3
+  AREA_LA_minus_LAxLB = calc_tot_area(LA_minus_LAxLB)/1e3
+  AREA_LB_minus_LAxLB = calc_tot_area(LB_minus_LAxLB)/1e3
+  
+  AREA_MRG_TH = AREA_LAxLB + AREA_LA_minus_LAxLB + AREA_LA_minus_LAxLB
+  AREA_MRG_AC = calc_tot_area(LA_LB_MERGED)/1e3
   
   LA_LB_MERGED_ffn = paste0(elf_merge_dir, ffn_stub_list[[4]], ".gpkg")
   st_write(LA_LB_MERGED, LA_LB_MERGED_ffn, append = F)
   print(paste("Writing the Newly Merged layer to", LA_LB_MERGED_ffn))
-  # mapview(MERGED_LAYER)
+  mapview(LA_LB_MERGED)
   # Step 5b - Replace 
   
-  # Step 5 - Remove Polygons from LA that intersect with LB
+  # Check nrows
+  # LA_LB_MERGED = st_read(LA_LB_MERGED_ffn)  
+  # LA_LB_MERGED %>% filter(LIMITATION == "Multiple" & PODZOLS ==1 ) %>%  nrow()
+  # 
   
-  # Step 6 - Merge the 3 layers
   
   WF = toc()
   print(paste("whole merge function took",WF))
@@ -228,14 +292,27 @@ Approach for merging a new layer Lb into the exisiting layer La
 
 elf_2012_layer_ffn = "/mnt/data/mcmillana/PRJ3597-MPI-ELF/DATA/mfe-environmental-limiting-factors-2012-SHP/environmental-limiting-factors-2012.shp"
 elf_2012_layer=st_read(elf_2012_layer_ffn)
+
+names(elf_2012_layer)
 elf_2012_layer %>% pull(LIMITATION) %>% unique()
 
-elf_merge_dn = paste0(elfdir, "DATA/MERGING_ELF/")
+# [1] "DRY"        "LIMITED"    "FROST_FLAT" "SALINE"     "ULTRAMAFIC" "HOT_GEOTHM" "PAKIHI"     "GUMLANDS"   "SALT_SPRAY" "LIMITATION"
+# [11] "WET"        "COLD_BASIN" "PODZOLS"    "TREELINE"   "geometry"  
+
+# > elf_2012_layer %>% pull(LIMITATION) %>% unique()
+
+#  [1] "None"                   "Substrate Gumlands"     "Substrate Pakihi"       "Substrate Podzols"      "Too Exposed Salt Spray"
+#  [6] "Substrate Ultramafic"   "Multiple"               "Too Cold Frost Flats"   "Too Wet"                "Too Cold Near Treeline"
+# [11] "Too Dry"                "Too Hot Geothermal"     "Too Cold Basins"   
+
+
+
+
 
 LIMITING_SOILS_PODZOLS_ffn = paste0(elfdir,"DATA/SOIL_Limitation_layers/finished_unmerged_layers/LIMITING_SOILS_PODZOLS.shp")
 LIMITING_SOILS_PODZOLS = st_read(LIMITING_SOILS_PODZOLS_ffn)
 
-ELF_2012_TO_KEEP_PROPER_ffn = paste0(elf_merge_dn,"ELF_2012_TO_KEEP_PROPER.shp")
+ELF_2012_TO_KEEP_PROPER_ffn = paste0(elf_merge_dir,"ELF_2012_TO_KEEP_PROPER.shp")
 ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
 
 
@@ -249,7 +326,7 @@ ffn_stub_curr = "L0xL1"
 
 ffn_stub_list = c("L0xL1", "L0_minus_L0xL1", "L1_minus_L0xL1")
 
-MRG_LAYERS = merge_elf_layers(L0,L1, datadir = elf_merge_dn, ffn_stub_list = ffn_stub_list,ncore_rec = 36) #551 seconds
+MRG_LAYERS = merge_elf_layers(L0,L1, datadir = elf_merge_dir, ffn_stub_list = ffn_stub_list,ncore_rec = 36) #551 seconds
 
 MRG_LAYERS = L0xL1
 
@@ -257,5 +334,116 @@ MRG_LAYERS[[1]]
 MRG_LAYERS[[2]]
 MRG_LAYERS[[3]]
 
+
+L0_L1_MERGED = st_read(paste0(elf_merge_dir, "L0_L1_MERGED.gpkg"))
+
+L0_L1_MERGED_f = L0_L1_MERGED %>% filter(LIMITATION=="Multiple" & PODZOLS==1)
+
 ```
 
+
+
+
+# MERGE_L0_L1 : PODZOLS (L1) ---> ELF_TO_KEEP_PROPER (L0)
+
+```{r}
+
+   LIMITING_SOILS_PODZOLS_ffn = paste0(elfdir,"DATA/SOIL_Limitation_layers/finished_unmerged_layers/LIMITING_SOILS_PODZOLS.shp")
+LIMITING_SOILS_PODZOLS = st_read(LIMITING_SOILS_PODZOLS_ffn)
+
+ELF_2012_TO_KEEP_PROPER_ffn = paste0(elf_merge_dir,"ELF_2012_TO_KEEP_PROPER.shp")
+ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
+
+
+  ffn_stub_list = c("L0xL1", "L0_minus_L0xL1", "L1_minus_L0xL1", "L0_L1_MERGED")
+  LA_INPUT = ELF_2012_TO_KEEP_PROPER
+  LB_INPUT = LIMITING_SOILS_PODZOLS
+  LB_LIM_FIELDNAME = "PODZOLS"
+  LB_LIMITATION_descr = "Substrate Podzols"
+
+  MERGE_L0_L1_RES = merge_elf_layers(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_descr, elf_merge_dir,  ffn_stub_list, ncore_rec = 36)
+
+```
+ 
+
+# MERGE_L1_L2 : TREELINE (L2) ---> L0_L1_MERGED 
+
+```{r}
+
+   #Merge TREELINE into L0_L1_MERGED to create the merged layer "L1_L2_MERGED"
+
+  ffn_stub_list = c("L1xL2", "L1_minus_L1xL2", "L2_minus_L1xL2", "L1_L2_MERGED")
+  LA_INPUT = st_read(paste0(elf_merge_dir, "L0_L1_MERGED.gpkg"))
+  LB_INPUT = st_read(paste0(elf_merge_dir, "NZ-High-Alt-Treeline-layer-02_23_v2.gpkg"))
+  mapview(LB_INPUT)
+  LB_LIM_FIELDNAME = "TREELINE"
+  LB_LIMITATION_descr = "Too Cold Near Treeline"
+
+  MERGE_L1_L2_RES = merge_elf_layers(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_descr, elf_merge_dir,  ffn_stub_list, ncore_rec = 24)
+
+```
+ 
+ 
+
+# MERGE_L2_L3 : WET (L3) ---> L1_L2_MERGED 
+
+```{r}
+#Merge TOO_WET into L1_L2_MERGED to create the merged layer "L2_L3_MERGED"
+  
+  ffn_stub_list = c("L2xL3", "L2_minus_L2xL3", "L3_minus_L2xL3", "L2_L3_MERGED")
+  LA_INPUT = st_read(paste0(elf_merge_dir, "L2_L3_MERGED.gpkg"))
+  LB_INPUT = st_read(paste0(elfdir,"DATA/SOIL_Limitation_layers/finished_unmerged_layers/SOIL_LIMITATIONS_TOO_WET.shp"))
+  mapview(LB_INPUT)
+  LB_LIM_FIELDNAME = "WET"
+  LB_LIMITATION_descr = "Too Wet"
+
+  MERGE_L2_L3_RES = merge_elf_layers(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_descr, elf_merge_dir,  ffn_stub_list, ncore_rec = 36)
+
+```
+ 
+
+# MERGE_L3_L4 : DRY (L4) ---> L2_L3_MERGED 
+
+```{r}
+#Merge TOO_WET into L1_L2_MERGED to create the merged layer "L1_L2_MERGED"
+  
+  ffn_stub_list = c("L3xL4", "L3_minus_L3xL4", "L4_minus_L3xL4", "L3_L4_MERGED")
+  LA_INPUT = st_read(paste0(elf_merge_dir, "L3_L4_MERGED.gpkg"))
+  LB_INPUT = st_read(paste0(elfdir,"DATA/SOIL_Limitation_layers/finished_unmerged_layers/SOIL_LIMITATIONS_TOO_WET.shp"))
+  # mapview(LB_INPUT)
+  LB_LIM_FIELDNAME = "WET"
+  LB_LIMITATION_descr = "Too Wet"
+
+  MERGE_L3_L4_RES = merge_elf_layers(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_descr, elf_merge_dir,  ffn_stub_list, ncore_rec = 36)
+
+```
+ 
+
+# MERGE_L4_L5 : SALINE (L5) ---> L2_L3_MERGED 
+
+```{r}
+#Merge TOO_WET into L1_L2_MERGED to create the merged layer "L1_L2_MERGED"
+  
+  ffn_stub_list = c("L4xL5", "L4_minus_L4xL5", "L5_minus_L4xL5", "L4_L5_MERGED")
+  LA_INPUT = st_read(paste0(elf_merge_dir, "L4_L5_MERGED.gpkg"))
+  LB_INPUT = st_read(paste0(elfdir,"DATA/SOIL_Limitation_layers/finished_unmerged_layers/SMAP_FSL_CMB_NZSC_FILT_SALINE.shp"))
+  # mapview(LB_INPUT)
+  LB_LIM_FIELDNAME = "SALINE"
+  LB_LIMITATION_descr = "Substrate Saline"
+
+  MERGE_L4_L5_RES = merge_elf_layers(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_descr, elf_merge_dir,  ffn_stub_list, ncore_rec = 36)
+
+```
+ 
+ 
+
+   #Merge TOO_WET into L1_L2_MERGED to create the merged layer "L1_L2_MERGED"
+  
+  # ffn_stub_list = c("L2xL3", "L3_minus_L2xL3", "L2_minus_L2xL3", "L2_L3_MERGED")
+  # LA_INPUT = st_read(paste0(elf_merge_dir, "L1_L2_MERGED.gpkg"))
+  # LB_INPUT = st_read(paste0(elfdir,"DATA/SOIL_Limitation_layers/finished_unmerged_layers/SOIL_LIMITATIONS_TOO_WET.shp"))
+  # mapview(LB_INPUT)
+  # LB_LIM_FIELDNAME = "WET"
+  # LB_LIMITATION_descr = "Too Wet"
+  
+  
