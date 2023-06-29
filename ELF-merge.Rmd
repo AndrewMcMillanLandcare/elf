@@ -411,8 +411,8 @@ ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
   LA_INPUT = st_read(paste0(elf_merge_dir, "L2_L3_MERGED.gpkg"))
   LB_INPUT = st_read(paste0(elfdir,"DATA/SOIL_Limitation_layers/finished_unmerged_layers/LIMITING_SOILS_TOO_DRY.shp"))
   # mapview(LB_INPUT)
-  LB_LIM_FIELDNAME = "WET"
-  LB_LIMITATION_descr = "Too Wet"
+  LB_LIM_FIELDNAME = "DRY"
+  LB_LIMITATION_descr = "Too Dry"
 
   MERGE_L3_L4_RES = merge_elf_layers(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_descr, elf_merge_dir,  ffn_stub_list, ncore_rec = 36)
 
