@@ -137,7 +137,12 @@ mapview(ELF_2023_PREFINAL_CLIP_SMY, zcol = "LIM_TYPE")
 
 
 ```{r}
-ELF_2023_PREFINAL_FULL_CLEAN = ELF_2023_PREFINAL %>% 
+library(nngeo)
+
+ELF_2023_PREFINAL_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL.gpkg")
+ELF_2023_PREFINAL = st_read(ELF_2023_PREFINAL_ffn)
+
+ELF_2023_PREFINAL_FULL_CLEAN_NO_DISSOLVE = ELF_2023_PREFINAL %>% 
   mutate(LIM_TYPE=
            strtoi(
     paste0(
@@ -149,19 +154,22 @@ ELF_2023_PREFINAL_FULL_CLEAN = ELF_2023_PREFINAL %>%
 ea_id_area() %>% 
   filter(POLY_AREA_HA > 1)
 
+
+ELF_2023_PREFINAL_FULL_CLEAN_NO_DISSOLVE_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_NO_DISSOLVE_ffn.shp")
+
+st_write(ELF_2023_PREFINAL_FULL_CLEAN_NO_DISSOLVE, ELF_2023_PREFINAL_FULL_CLEAN_NO_DISSOLVE_ffn, append = F)
+
 mapview(ELF_2023_PREFINAL_FULL_CLEAN, zcol = "LIM_TYPE")
 
-ELF_2023_PREFINAL_FULL_CLEAN_SMY = ELF_2023_PREFINAL_FULL_CLEAN %>% 
-   group_by(LIM_TYPE) %>% 
-  summarise(across(c(1:14,16), first)) %>% 
-  st_remove_holes(1.5*1e4) 
+# ELF_2023_PREFINAL_FULL_CLEAN_SMY = ELF_2023_PREFINAL_FULL_CLEAN %>% 
+#    st_remove_holes(1.5*1e4) 
 
 # %>% 
 #   st_union(by_feature = T, is_coverage = T)
   
-ELF_2023_PREFINAL_FULL_CLEAN_SMY_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_SMY.gpkg")
+ELF_2023_PREFINAL_FULL_CLEAN_SMY_NOT_DISS_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_SMY.gpkg")
 
-st_write(ELF_2023_PREFINAL_FULL_CLEAN_SMY, ELF_2023_PREFINAL_FULL_CLEAN_SMY_ffn, append = T)
+st_write(ELF_2023_PREFINAL_FULL_CLEAN_SMY_NOT_DISS, ELF_2023_PREFINAL_FULL_CLEAN_SMY_NOT_DISS_ffn, append = T)
 
 
 ELF_2023_PREFINAL_FULL_CLEAN_SMY = st_read(ELF_2023_PREFINAL_FULL_CLEAN_SMY_ffn)
@@ -255,18 +263,16 @@ ELF_2012 = st_read(ELF_2012_ffn) %>%
 # ELF_2023_ffn = paste0(elf_final_dn, "ELF_2023_FINAL.gpkg") 
 # ELF_2023 = st_read(ELF_2023_ffn)
 
-ELF_2023_PREFINAL_FULL_CLEAN_SMY_valid_POLY_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_SMY_valid_POLY.gpkg")
+# ELF_2023_PREFINAL_FULL_CLEAN_SMY_valid_POLY_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_SMY_valid_POLY.gpkg")
+# 
+# ELF_2023 = st_read(ELF_2023_PREFINAL_FULL_CLEAN_SMY_valid_POLY_ffn)
+ELF_2023 = ELF_2023_PREFINAL_FULL_CLEAN
 
-ELF_2023 = st_read(ELF_2023_PREFINAL_FULL_CLEAN_SMY_valid_POLY_ffn)
+ncore_rec = 36
 
-ELF_2012_UNN = st_union(ELF_2012)
-ELF_2023_UNN = st_union(ELF_2023)
+  ELF_2012_minus_ELF_2023 = ea_intersection(ELF_2012, ELF_2023,PC = Current_PC, ffn_stub = "ELF_2012_minus_ELF_2023", dn = elf_final_dn, parallel = T, ncore = ncore_rec, val = "both",filetype = "SHP",diff_opt = T )
 
-ncore_rec = 64
-
-  ELF_2012_minus_ELF_2023 = ea_intersection(ELF_2012, ELF_2023_UNN,PC = Current_PC, ffn_stub = "ELF_2012_minus_ELF_2023", dn = elf_final_dn, parallel = T, ncore = ncore_rec, val = "both",filetype = "SHP",diff_opt = T )
-
-ELF_2023_minus_ELF_2012 = ea_intersection(ELF_2023, ELF_2012_UNN,PC = Current_PC, ffn_stub = "ELF_2023_minus_ELF_2012", dn = elf_final_dn, parallel = T, ncore = ncore_rec, val = "both",filetype = "SHP",diff_opt = T )
+ELF_2023_minus_ELF_2012 = ea_intersection(ELF_2023, ELF_2012,PC = Current_PC, ffn_stub = "ELF_2023_minus_ELF_2012", dn = elf_final_dn, parallel = T, ncore = ncore_rec, val = "both",filetype = "SHP",diff_opt = T )
 
 
 

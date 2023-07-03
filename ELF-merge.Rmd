@@ -74,8 +74,10 @@ if (Current_PC == ""){
   rootDrive <- "D:/"
 }
 
-elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF/")
 
+# NOTE CORRECTING LAYER 3/7/23
+elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF_REV/")
+if(!dir.exists(elf_merge_dir)){dir.create(elf_merge_dir)}
 ```
 
 # function: find_overlapping 
@@ -85,7 +87,7 @@ elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF/")
 merge_elf_layers = function(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_descr, elf_merge_dir,  ffn_stub_list, ncore_rec = 36){
   
   #----test input data
-  elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF/")
+  # elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF/")
   
   
   
@@ -202,7 +204,7 @@ merge_elf_layers = function(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_
   LA_minus_LAxLB_w_attr = LA_minus_LAxLB %>% 
     left_join(LA_attr, by = "LA_UID") 
   
-  # Step 4c - Limitation attributes for LB_minus_LAxLB - inherit all attr and type from LA
+  # Step 4c - Limitation attributes for LB_minus_LAxLB - this will have a single limitation which will be the input layer LB
   
   LB_minus_LAxLB_w_attr = LB_minus_LAxLB %>% 
     mutate(
@@ -361,8 +363,8 @@ ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
   LB_LIM_FIELDNAME = "PODZOLS"
   LB_LIMITATION_descr = "Substrate Podzols"
 
-  MERGE_L0_L1_RES = merge_elf_layers(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_descr, elf_merge_dir,  ffn_stub_list, ncore_rec = 36)
-
+  MERGE_L0_L1_RES = merge_elf_layers(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_descr, elf_merge_dir,  ffn_stub_list, ncore_rec = 36) 
+  
 ```
  
 
@@ -379,7 +381,7 @@ ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
   LB_LIM_FIELDNAME = "TREELINE"
   LB_LIMITATION_descr = "Too Cold Near Treeline"
 
-  MERGE_L1_L2_RES = merge_elf_layers(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_descr, elf_merge_dir,  ffn_stub_list, ncore_rec = 48)
+  MERGE_L1_L2_RES = merge_elf_layers(LA_INPUT, LB_INPUT, LB_LIM_FIELDNAME, LB_LIMITATION_descr, elf_merge_dir,  ffn_stub_list, ncore_rec = 64)
 
 ```
  
@@ -439,7 +441,50 @@ ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
 
 ```
  
+# Area Checks 
  
+```{r}
+
+# read the 2012 Layer
+ELF_2012_ffn = paste0(elfdir, "DATA/mfe-environmental-limiting-factors-2012-SHP/environmental-limiting-factors-2012.shp")
+ELF_2012 = st_read(ELF_2012_ffn) %>% 
+  filter(!LIMITATION=="None")
+
+ELF_2012_ng = ELF_2012 %>% ea_id_area(rem_geo = T) 
+ELF_2012_ng_SMY = ELF_2012_ng %>% group_by(LIMITATION) %>% summarise(AREA_KHA = sum(POLY_AREA_HA)/1e3)
+
+ELF_2012_ng %>% select(DRY, FROST_FLAT:SALT_SPRAY, WET:TREELINE, POLY_AREA_HA) %>% 
+  gather(LIM, BX, -POLY_AREA_HA) %>% 
+  filter(BX==1) %>% 
+  group_by(LIM) %>% 
+  summarise(AREA_KHA = sum(POLY_AREA_HA)/1e3)
+  
+  
+
+ LIMITING_SOILS_PODZOLS_ffn = paste0(elfdir,"DATA/SOIL_Limitation_layers/finished_unmerged_layers/LIMITING_SOILS_PODZOLS.shp")
+LIMITING_SOILS_PODZOLS = st_read(LIMITING_SOILS_PODZOLS_ffn)
+
+ELF_2012_TO_KEEP_PROPER_ffn = paste0(elf_merge_dir,"ELF_2012_TO_KEEP_PROPER.shp")
+ELF_2012_TO_KEEP_PROPER = st_read(ELF_2012_TO_KEEP_PROPER_ffn)
+
+calc_tot_area(LIMITING_SOILS_PODZOLS)
+
+
+
+
+
+
+
+
+
+
+
+```
+
+
+
+
+
  
  
   

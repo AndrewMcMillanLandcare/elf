@@ -1,0 +1,298 @@
+---
+title: "ELF-clean-and-QAQC"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+
+Last updated 29/06/23 06:28
+
+# libraries and folders
+
+
+```{r}
+
+
+
+
+library(sf)
+library(tidyverse)
+# library(mapview)
+library(cowplot)
+library(lubridate)
+# library(xlsx)
+library(readxl)
+library(rmapshaper)
+library(mapview)
+# library(rmapshaper)
+library(plotly)
+library(tictoc)
+library(parallel)
+library(doParallel)
+library(terra)
+library(openxlsx)
+library(scales)
+library(purrr)
+library(furrr)
+library(terra)
+
+Current_PC <- Sys.info()["nodename"]
+
+if (Current_PC == ""){
+  root = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
+  datadir = paste0(root, "DATA/")
+  plotdir = paste0(root, "plot/")
+
+
+} else if (Current_PC == "EANZ-DT01-Linux") {
+  os <- "linux"
+  rootDrive <- "/media/andrew/HDD data/"
+  EDrive <- "/media/andrew/E-DRIVE-SSD/"
+  GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
+  
+} else if (Current_PC == "EANZ-DT01") {
+  os <- "win10"
+  rootDrive <- "D:/"
+  EDrive <- "E:/"
+  GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/" #check this!
+  
+} else if (Current_PC == "styx") {
+  os <- "linux"
+  rootDrive <- "/home/mcmillana/"
+  elfdir = "/mnt/data/mcmillana/PRJ3597-MPI-ELF/"
+  GeoSpatRoot = "/mnt/data/mcmillana/NZ-Geospatial-Data/"
+  source("/home/mcmillana/code/R/utils/mcm_sp_utils.R") 
+  
+} else if (Current_PC == "L-8P30JW3") {
+  os <- "win10"
+  rootDrive <- "C:/Users/McMillanAn/OneDrive - MWLR"
+  elfdir = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
+  GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
+  source("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/Rcode/mcm_sp_utils.R")  
+} else {
+  rootDrive <- "D:/"
+}
+
+elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF/")
+plotdir = paste0(elfdir,"plots/")
+```
+
+
+# Compare areas subject to limitations
+```{r}
+# read the newRevised 2023 ELF Layer
+elf_final_dn = paste0(elfdir, "ELF-LAYER-2023-FINAL/")
+
+gc()
+ELF_2023_FINAL_ffn = paste0(elf_final_dn, "ELF_2023_FINAL.gpkg")
+ELF_2023_FINAL = st_read(ELF_2023_FINAL_ffn)
+
+# read the 2012 Layer
+ELF_2012_ffn = paste0(elfdir, "DATA/mfe-environmental-limiting-factors-2012-SHP/environmental-limiting-factors-2012.shp")
+ELF_2012 = st_read(ELF_2012_ffn) %>% 
+  filter(!LIMITATION=="None")
+
+
+# Add areas to these layers
+ELF_2012_nogeo = ELF_2012 %>% ea_id_area() %>% st_set_geometry(NULL) %>% as_tibble()
+ELF_2023_nogeo = ELF_2023_FINAL %>% ea_id_area() %>% st_set_geometry(NULL) %>% as_tibble()
+
+names(ELF_2012_nogeo)
+
+#Create a LIM_TYPE field for the 2012 Layer (similar to that for the 2023 layer)
+ELF_2012_nogeo_w_LIM_TYPE = ELF_2012_nogeo %>% 
+   mutate(LIM_TYPE=
+           strtoi(
+    paste0(
+      as.character(DRY),as.character(FROST_FLAT),as.character(SALINE),as.character(ULTRAMAFIC),
+      as.character(HOT_GEOTHM),as.character(PAKIHI),as.character(GUMLANDS),as.character(SALT_SPRAY),
+      as.character(WET),as.character(COLD_BASIN),as.character(PODZOLS),as.character(TREELINE)
+    ), base=2)
+  ) 
+
+
+# Summarise the 2012 layer by limitation
+ELF_2012_nogeo_lng_grpby_LIM_NM = ELF_2012_nogeo %>% 
+  group_by(LIMITATION) %>% 
+  summarise(
+    AREA_HA = sum(POLY_AREA_HA)
+  ) %>% 
+ mutate(ELF_VERSION = 2012)
+
+# Summarise the 2032 layer by limitation
+ELF_2023_nogeo_lng_grpby_LIM_NM = ELF_2023_nogeo %>% 
+  group_by(LIMITATION) %>% 
+  summarise(
+    AREA_HA = sum(POLY_AREA_HA)
+  ) %>% 
+  mutate(ELF_VERSION = 2023)
+
+# Put them both in the same data frame
+ELF_AREA_SMY = ELF_2012_nogeo_lng_grpby_LIM_NM %>% 
+  bind_rows(ELF_2023_nogeo_lng_grpby_LIM_NM) 
+
+#Save the combined data frame to a csv file
+ELF_AREA_SMY_ffn = paste0(elfdir, "DATA/ELF_AREA_SMY.csv")
+write_csv(ELF_AREA_SMY, ELF_AREA_SMY_ffn)
+```
+
+
+# ~~~~~~~~~~~~~~~~ #
+# Figure 1001 - Plot the differences in limited areas between the 2012 and the 2023 layer
+# ~~~~~~~~~~~~~~~~ #
+
+```{r}
+
+fignum = 1001
+figdesc = "Areas of Limitation 2012 and 2023 Bar Chart"
+figfmt = "png"
+fig_ffn = paste0(plotdir, fignum,"-", figdesc, ".", figfmt)
+
+g = ggplot(ELF_AREA_SMY) + geom_bar(aes(LIMITATION, AREA_HA/1e3, fill = as.factor(ELF_VERSION)), stat = "identity", position = "dodge") + coord_flip()
+  
+g = g + labs(y = "Area (kHa)", x = "Limitation", fill = "ELF Version")
+
+g = gab_style(g,3)
+
+g
+
+
+ggsave(filename = fig_ffn, plot = g, width = 28, height = 16, units = "cm", bg = "white")
+
+
+
+```
+
+#calculate differences
+```{r}
+
+
+ELF_AREA_SMY_wd = ELF_AREA_SMY %>% 
+  spread(key = ELF_VERSION, value = "AREA_HA") %>% 
+  mutate(
+    DIFF_2023_minus_2012 = `2023` - `2012`,
+    PERC_DIFF = 100 * DIFF_2023_minus_2012/`2012`)
+
+
+
+```
+
+
+# ~~~~~~~~~~~~~~~~ #
+# Figure 1002 - Plot the differences in limited areas between the 2012 and the 2023 layer
+# ~~~~~~~~~~~~~~~~ #
+
+```{r}
+
+fignum = 1002
+figdesc = "Difference inAreas of Limitation 2012 and 2023 Bar Chart"
+figfmt = "png"
+fig_ffn = paste0(plotdir, fignum,"-", figdesc, ".", figfmt)
+
+g = ggplot(ELF_AREA_SMY_wd) + geom_bar(aes(LIMITATION, DIFF_2023_minus_2012/1e3), stat = "identity") + coord_flip()
+  
+g = g + labs(y = "Area (kHa)", x = "Limitation", fill = "ELF Version")
+
+g = gab_style(g,3)
+
+g
+
+
+ggsave(filename = fig_ffn, plot = g, width = 28, height = 16, units = "cm", bg = "white")
+
+
+
+```
+
+
+```{r}
+ELF_2012_nogeo_w_LIM_TYPE
+
+
+
+ELF_AREA_SMY %>% group_by(LIMITATION) %>% mutate(DIFF = AREA_HA[ELF_VERSION==2012]- AREA_HA[ELF_VERSION==2023])
+
+
+ELF_2012_nogeo_grpby_LIM_TYPE = ELF_2012_nogeo_w_LIM_TYPE %>% 
+  select(LIM_TYPE, POLY_AREA_HA) %>% 
+  group_by(LIM_TYPE) %>% 
+  summarise(
+    AREA_HA = sum(POLY_AREA_HA)
+  ) %>% 
+  mutate(ELF_VERSION = 2012)
+
+ELF_2023_nogeo_grpby_LIM_TYPE = ELF_2023_nogeo %>% 
+    select(LIM_TYPE, POLY_AREA_HA) %>% 
+  group_by(LIM_TYPE) %>% 
+  summarise(
+    AREA_HA = sum(POLY_AREA_HA)
+  ) %>% 
+  mutate(ELF_VERSION = 2023)
+    
+ ELF_CMB_grpby_LIM_TYPE = ELF_2012_nogeo_grpby_LIM_TYPE %>% 
+   bind_rows(ELF_2023_nogeo_grpby_LIM_TYPE)
+  
+ ELF_CMB_grpby_LIM_TYPE_ffn = paste0(elfdir,"DATA/ELF_CMB_grpby_LIM_TYPE.csv")
+ write_csv(ELF_CMB_grpby_LIM_TYPE, ELF_CMB_grpby_LIM_TYPE_ffn)
+ 
+```
+
+
+
+# ~~~~~~~~~~~~~~~~ #
+# Figure 1003 - Plot the differences in limited areas between the 2012 and the 2023 layer, this time grouped by LIM_TYPE
+# ~~~~~~~~~~~~~~~~ #
+
+```{r}
+
+fignum = 1003
+figdesc = "Areas of LIM_TYPE 2012 and 2023 Bar Chart - grouped by LIM_TYPE"
+figfmt = "png"
+fig_ffn = paste0(plotdir, fignum,"-", figdesc, ".", figfmt)
+
+g = ggplot(ELF_CMB_grpby_LIM_TYPE) + geom_bar(aes(as.factor(LIM_TYPE), AREA_HA/1e3, fill = as.factor(ELF_VERSION)), stat = "identity", position = "dodge") + coord_flip()
+  
+g = g + labs(y = "Area (kHa)", x = "Limitation", fill = "ELF Version")
+
+g = gab_style(g,3)
+
+g
+
+
+ggsave(filename = fig_ffn, plot = g, width = 28, height = 16, units = "cm", bg = "white")
+
+
+
+```
+
+
+# Make a table that shows what individual limitations correspond with the LIM_TYPE integer
+```{r}
+# LIM_TYPE_KEY = 
+
+limitation_names = c("DRY", "FROST_FLAT","SALINE","ULTRAMAFIC", "HOT_GEOTHM", "PAKIHI",
+                     "GUMLANDS", "SALT_SPRAY","WET","COLD_BASIN", "PODZOLS", "TREELINE")
+
+LIM_TYPE_UNQ = ELF_2023_nogeo_lng %>% pull(LIM_TYPE) %>% unique() 
+m <- sapply(LIM_TYPE_UNQ,function(x){ intToBits(x)}) %>% t()
+mlims = m[,1:12] %>% as.data.frame() %>% as_tibble()
+names(mlims) <- limitation_names
+
+LIMITATION_KEY = mlims %>% 
+  mutate(
+    across(everything(),as.character),
+  LIM_TYPE = LIM_TYPE_UNQ) %>% 
+  select(LIM_TYPE, everything())
+# %>% as.data.frame() %>% as_tibble()
+
+LIMITATION_KEY_ffn = paste0(elfdir,"DATA/LIMITATION_KEY.csv")
+write_csv(LIMITATION_KEY, LIMITATION_KEY_ffn)
+
+ELF_2023_nogeo_lng %>% pull(LIM_TYPE) %>% unique()
+# ELF_TEST_BOX_ffn = paste0(elf_merge_dir,"ELF_TEST_BOX.shp" )
+ELF_TEST_BOX_ffn = paste0(elfdir,"ELF-LAYER-2023-PREFINAL/BIG_BOX.shp")
+ELF_TEST_BOX = st_read(ELF_TEST_BOX_ffn)
+
+ELF_2012_CLIP = st_crop(ELF_2012, ELF_TEST_BOX)
+```

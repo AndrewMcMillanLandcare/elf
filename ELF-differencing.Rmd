@@ -1,0 +1,143 @@
+---
+title: "ELF-clean-and-QAQC"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+
+Last updated 29/06/23 06:28
+
+# libraries and folders
+
+
+```{r}
+
+
+
+
+library(sf)
+library(tidyverse)
+# library(mapview)
+library(cowplot)
+library(lubridate)
+# library(xlsx)
+library(readxl)
+library(rmapshaper)
+library(mapview)
+# library(rmapshaper)
+library(plotly)
+library(tictoc)
+library(parallel)
+library(doParallel)
+library(terra)
+library(openxlsx)
+library(scales)
+library(purrr)
+library(furrr)
+library(terra)
+
+Current_PC <- Sys.info()["nodename"]
+
+if (Current_PC == ""){
+  root = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
+  datadir = paste0(root, "DATA/")
+  plotdir = paste0(root, "plot/")
+
+
+} else if (Current_PC == "EANZ-DT01-Linux") {
+  os <- "linux"
+  rootDrive <- "/media/andrew/HDD data/"
+  EDrive <- "/media/andrew/E-DRIVE-SSD/"
+  GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
+  
+} else if (Current_PC == "EANZ-DT01") {
+  os <- "win10"
+  rootDrive <- "D:/"
+  EDrive <- "E:/"
+  GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/" #check this!
+  
+} else if (Current_PC == "styx") {
+  os <- "linux"
+  rootDrive <- "/home/mcmillana/"
+  elfdir = "/mnt/data/mcmillana/PRJ3597-MPI-ELF/"
+  GeoSpatRoot = "/mnt/data/mcmillana/NZ-Geospatial-Data/"
+  source("/home/mcmillana/code/R/utils/mcm_sp_utils.R") 
+  
+} else if (Current_PC == "L-8P30JW3") {
+  os <- "win10"
+  rootDrive <- "C:/Users/McMillanAn/OneDrive - MWLR"
+  elfdir = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
+  GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
+  source("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/Rcode/mcm_sp_utils.R")  
+} else {
+  rootDrive <- "D:/"
+}
+
+elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF/")
+
+```
+
+
+# Create Difference Layer
+
+```{r}
+
+elf_final_dn = paste0(elfdir,"ELF-LAYER-2023-FINAL/")
+elf_prefinal_dn= paste0(elfdir,"ELF-LAYER-2023-PREFINAL/")
+
+
+ELF_2012_ffn = paste0(elfdir, "DATA/mfe-environmental-limiting-factors-2012-SHP/environmental-limiting-factors-2012.shp")
+
+ELF_2012 = st_read(ELF_2012_ffn) %>% 
+  filter(LIMITATION!="None") %>% 
+   mutate(LIM_TYPE=
+           strtoi(
+    paste0(
+      as.character(DRY),as.character(FROST_FLAT),as.character(SALINE),as.character(ULTRAMAFIC),
+      as.character(HOT_GEOTHM),as.character(PAKIHI),as.character(GUMLANDS),as.character(SALT_SPRAY),
+      as.character(WET),as.character(COLD_BASIN),as.character(PODZOLS),as.character(TREELINE)
+    ), base=2)
+  )
+# 
+# ELF_2023_ffn = paste0(elf_final_dn, "ELF_2023_FINAL.gpkg") 
+# ELF_2023 = st_read(ELF_2023_ffn)
+
+# ELF_2023_PREFINAL_FULL_CLEAN_SMY_valid_POLY_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_SMY_valid_POLY.gpkg")
+# 
+ELF_2023_ffn = paste0(elf_prefinal_dn, "ELF_2023_PREFINAL_FULL_CLEAN_SMY_Single_Poly.shp")
+ELF_2023 = st_read(ELF_2023_ffn) %>% 
+  ea_id_area() %>% 
+  filter(POLY_AREA_HA >1)
+# ELF_2023 = ELF_2023_PREFINAL_FULL_CLEAN
+
+ncore_rec = 64
+
+
+ELF_2012_unn = st_union(ELF_2012)
+ELF_2023_unn = st_union(ELF_2023)
+
+DIFF_1 = st_difference(ELF_2012_unn, ELF_2023_unn)
+DIFF_2 = st_difference(ELF_2023_unn, ELF_2012_unn)
+
+DIFFERENCE_ELF_2012_minus_ELF_2023 = DIFF_1 %>% st_collection_extract("POLYGON")
+DIFFERENCE_ELF_2023_minus_ELF_2012 = DIFF_2 %>% st_collection_extract("POLYGON")
+
+DIFFERENCE_ELF_2012_minus_ELF_2023_ffn = paste0(elf_final_dn, "DIFFERENCE_ELF_2012_minus_ELF_2023.shp")
+DIFFERENCE_ELF_2023_minus_ELF_2012_ffn = paste0(elf_final_dn, "DIFFERENCE_ELF_2023_minus_ELF_2012.shp")
+
+st_write(DIFFERENCE_ELF_2012_minus_ELF_2023, DIFFERENCE_ELF_2012_minus_ELF_2023_ffn, append = F)
+st_write(DIFFERENCE_ELF_2023_minus_ELF_2012, DIFFERENCE_ELF_2023_minus_ELF_2012_ffn, append = F)
+
+
+
+
+
+  ELF_2012_minus_ELF_2023 = ea_intersection(ELF_2012, ELF_2023_unn,PC = Current_PC, ffn_stub = "ELF_2012_minus_ELF_2023", dn = elf_final_dn, parallel = T, ncore = ncore_rec, val = "P1",filetype = "SHP",diff_opt = T )
+
+ELF_2023_minus_ELF_2012 = ea_intersection(ELF_2023, ELF_2012_unn,PC = Current_PC, ffn_stub = "ELF_2023_minus_ELF_2012", dn = elf_final_dn, parallel = T, ncore = ncore_rec, val = "P1",filetype = "SHP",diff_opt = T )
+
+
+
+```
+
