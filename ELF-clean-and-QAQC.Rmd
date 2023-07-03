@@ -36,6 +36,7 @@ library(scales)
 library(purrr)
 library(furrr)
 library(terra)
+library(nngeo)
 
 Current_PC <- Sys.info()["nodename"]
 
@@ -69,7 +70,8 @@ if (Current_PC == ""){
   rootDrive <- "C:/Users/McMillanAn/OneDrive - MWLR"
   elfdir = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
   GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
-  source("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/Rcode/mcm_sp_utils.R")  
+   source("C:/Users/McMillanAn/OneDrive - MWLR/code/R/mcm_sp_utils.R")  
+
 } else {
   rootDrive <- "D:/"
 }
@@ -81,6 +83,7 @@ elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF/")
 
 # read old and new elf layers and box
 ```{r}
+
 gc()
 ELF_2023_PREFINAL_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL.gpkg")
 ELF_2023_PREFINAL = st_read(ELF_2023_PREFINAL_ffn)
@@ -137,6 +140,18 @@ mapview(ELF_2023_PREFINAL_CLIP_SMY, zcol = "LIM_TYPE")
 
 
 ```{r}
+
+
+
+ELF_2023_PREFINAL_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL.gpkg")
+
+
+
+ELF_2023_PREFINAL_ffn = paste0(elfdir, "DATA/MERGING_ELF_REV/L4_L5_MERGED.gpkg") 
+ELF_2023_PREFINAL = st_read(ELF_2023_PREFINAL_ffn)
+
+
+
 ELF_2023_PREFINAL_FULL_CLEAN = ELF_2023_PREFINAL %>% 
   mutate(LIM_TYPE=
            strtoi(
@@ -151,11 +166,13 @@ ea_id_area() %>%
 
 mapview(ELF_2023_PREFINAL_FULL_CLEAN, zcol = "LIM_TYPE")
 
+
+tic()
 ELF_2023_PREFINAL_FULL_CLEAN_SMY = ELF_2023_PREFINAL_FULL_CLEAN %>% 
    group_by(LIM_TYPE) %>% 
   summarise(across(c(1:14,16), first)) %>% 
   st_remove_holes(1.5*1e4) 
-
+toc()
 # %>% 
 #   st_union(by_feature = T, is_coverage = T)
   

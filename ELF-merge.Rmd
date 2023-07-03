@@ -69,7 +69,7 @@ if (Current_PC == ""){
   rootDrive <- "C:/Users/McMillanAn/OneDrive - MWLR"
   elfdir = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
   GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
-  source("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/Rcode/mcm_sp_utils.R")  
+  source("C:/Users/McMillanAn/OneDrive - MWLR/code/R/mcm_sp_utils.R")  
 } else {
   rootDrive <- "D:/"
 }
