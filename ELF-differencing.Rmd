@@ -69,7 +69,7 @@ if (Current_PC == ""){
   rootDrive <- "C:/Users/McMillanAn/OneDrive - MWLR"
   elfdir = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
   GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
-  source("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/Rcode/mcm_sp_utils.R")  
+  source("T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/DATA/SOIL_Limitation_layers/Rcode/utils/mcm_sp_utils.R")  
 } else {
   rootDrive <- "D:/"
 }
@@ -105,11 +105,14 @@ ELF_2012 = st_read(ELF_2012_ffn) %>%
 
 # ELF_2023_PREFINAL_FULL_CLEAN_SMY_valid_POLY_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_SMY_valid_POLY.gpkg")
 # 
-ELF_2023_ffn = paste0(elf_prefinal_dn, "ELF_2023_PREFINAL_FULL_CLEAN_SMY_Single_Poly.shp")
-ELF_2023 = st_read(ELF_2023_ffn) %>% 
-  ea_id_area() %>% 
-  filter(POLY_AREA_HA >1)
+# ELF_2023_ffn = paste0(elf_prefinal_dn, "ELF_2023_PREFINAL_FULL_CLEAN_SMY_Single_Poly.shp")
+# ELF_2023 = st_read(ELF_2023_ffn) %>% 
+#   ea_id_area() %>% 
+#   filter(POLY_AREA_HA >1)
 # ELF_2023 = ELF_2023_PREFINAL_FULL_CLEAN
+
+ELF_2023_ffn = paste0(elf_final_dn, "GPKG/ELF_2023_FINAL.gpkg")
+ELF_2023 = st_read(ELF_2023_ffn)
 
 ncore_rec = 64
 
@@ -123,6 +126,8 @@ DIFF_2 = st_difference(ELF_2023_unn, ELF_2012_unn)
 DIFFERENCE_ELF_2012_minus_ELF_2023 = DIFF_1 %>% st_collection_extract("POLYGON")
 DIFFERENCE_ELF_2023_minus_ELF_2012 = DIFF_2 %>% st_collection_extract("POLYGON")
 
+
+
 DIFFERENCE_ELF_2012_minus_ELF_2023_ffn = paste0(elf_final_dn, "DIFFERENCE_ELF_2012_minus_ELF_2023.shp")
 DIFFERENCE_ELF_2023_minus_ELF_2012_ffn = paste0(elf_final_dn, "DIFFERENCE_ELF_2023_minus_ELF_2012.shp")
 
@@ -130,13 +135,28 @@ st_write(DIFFERENCE_ELF_2012_minus_ELF_2023, DIFFERENCE_ELF_2012_minus_ELF_2023_
 st_write(DIFFERENCE_ELF_2023_minus_ELF_2012, DIFFERENCE_ELF_2023_minus_ELF_2012_ffn, append = F)
 
 
+# recast as single polygons
 
+DIFFERENCE_ELF_2012_minus_ELF_2023 = st_read(DIFFERENCE_ELF_2012_minus_ELF_2023_ffn)
+DIFFERENCE_ELF_2023_minus_ELF_2012 = st_read(DIFFERENCE_ELF_2023_minus_ELF_2012_ffn)
 
+DIFFERENCE_ELF_2012_minus_ELF_2023_SPOLY = DIFFERENCE_ELF_2012_minus_ELF_2023 %>% 
+  st_cast("POLYGON")
 
-  ELF_2012_minus_ELF_2023 = ea_intersection(ELF_2012, ELF_2023_unn,PC = Current_PC, ffn_stub = "ELF_2012_minus_ELF_2023", dn = elf_final_dn, parallel = T, ncore = ncore_rec, val = "P1",filetype = "SHP",diff_opt = T )
+DIFFERENCE_ELF_2023_minus_ELF_2012_SPOLY = DIFFERENCE_ELF_2023_minus_ELF_2012 %>% 
+  st_cast("POLYGON")
 
-ELF_2023_minus_ELF_2012 = ea_intersection(ELF_2023, ELF_2012_unn,PC = Current_PC, ffn_stub = "ELF_2023_minus_ELF_2012", dn = elf_final_dn, parallel = T, ncore = ncore_rec, val = "P1",filetype = "SHP",diff_opt = T )
+DIFFERENCE_ELF_2012_minus_ELF_2023_SPOLY_ffn = paste0(elf_final_dn, "DIFFERENCE_ELF_2012_minus_ELF_2023_SPOLY.shp")
+st_write(DIFFERENCE_ELF_2012_minus_ELF_2023_SPOLY, DIFFERENCE_ELF_2012_minus_ELF_2023_SPOLY_ffn, append = F)
 
+DIFFERENCE_ELF_2023_minus_ELF_2012_SPOLY_ffn = paste0(elf_final_dn, "DIFFERENCE_ELF_2023_minus_ELF_2012_SPOLY.shp")
+st_write(DIFFERENCE_ELF_2023_minus_ELF_2012_SPOLY, DIFFERENCE_ELF_2023_minus_ELF_2012_SPOLY_ffn, append = F)
+
+# 
+#   ELF_2012_minus_ELF_2023 = ea_intersection(ELF_2012, ELF_2023_unn,PC = Current_PC, ffn_stub = "ELF_2012_minus_ELF_2023", dn = elf_final_dn, parallel = T, ncore = ncore_rec, val = "P1",filetype = "SHP",diff_opt = T )
+# 
+# ELF_2023_minus_ELF_2012 = ea_intersection(ELF_2023, ELF_2012_unn,PC = Current_PC, ffn_stub = "ELF_2023_minus_ELF_2012", dn = elf_final_dn, parallel = T, ncore = ncore_rec, val = "P1",filetype = "SHP",diff_opt = T )
+# 
 
 
 ```

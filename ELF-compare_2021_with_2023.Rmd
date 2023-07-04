@@ -85,7 +85,7 @@ plotdir = paste0(elfdir,"plots/")
 elf_final_dn = paste0(elfdir, "ELF-LAYER-2023-FINAL/")
 
 gc()
-ELF_2023_FINAL_ffn = paste0(elf_final_dn, "ELF_2023_FINAL.gpkg")
+ELF_2023_FINAL_ffn = paste0(elf_final_dn, "GPKG/ELF_2023_FINAL.gpkg")
 ELF_2023_FINAL = st_read(ELF_2023_FINAL_ffn)
 
 # read the 2012 Layer
@@ -135,6 +135,15 @@ ELF_AREA_SMY = ELF_2012_nogeo_lng_grpby_LIM_NM %>%
 #Save the combined data frame to a csv file
 ELF_AREA_SMY_ffn = paste0(elfdir, "DATA/ELF_AREA_SMY.csv")
 write_csv(ELF_AREA_SMY, ELF_AREA_SMY_ffn)
+
+unique(ELF_AREA_SMY$LIMITATION)
+
+limitation_lvls = rev(c("Too Cold Near Treeline", "Too Wet", "Too Dry", "Substrate Saline", "Substrate Podzols",
+                    "Substrate Ultramafic", "Substrate Pakihi", "Substrate Gumlands",
+                    "Too Cold Frost Flats", "Too Cold Basins", "Too Hot Geothermal",
+                    "Too Exposed Salt Spray","Multiple"))
+ELF_AREA_SMY$LIMITATION = factor(ELF_AREA_SMY$LIMITATION, levels = limitation_lvls)
+
 ```
 
 
@@ -153,12 +162,14 @@ g = ggplot(ELF_AREA_SMY) + geom_bar(aes(LIMITATION, AREA_HA/1e3, fill = as.facto
   
 g = g + labs(y = "Area (kHa)", x = "Limitation", fill = "ELF Version")
 
+g = g + scale_fill_manual(values = c("grey", "blue"))
+
 g = gab_style(g,3)
 
 g
 
-
-ggsave(filename = fig_ffn, plot = g, width = 28, height = 16, units = "cm", bg = "white")
+ggsave(filename = fig_ffn, plot = g, units = "cm", bg = "white")
+# ggsave(filename = fig_ffn, plot = g, width = 28, height = 16, units = "cm", bg = "white")
 
 
 

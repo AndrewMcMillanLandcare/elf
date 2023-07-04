@@ -70,13 +70,13 @@ if (Current_PC == ""){
   rootDrive <- "C:/Users/McMillanAn/OneDrive - MWLR"
   elfdir = "T:/Palmerston North/Projects A-E/Environmental Limiting Factors/ELF_Project/"
   GeoSpatRoot = "C:/Users/McMillanAn/OneDrive - MWLR/NZ-Geospatial-Data/"
-   source("C:/Users/McMillanAn/OneDrive - MWLR/code/R/mcm_sp_utils.R")  
+   source("C:/Users/McMillanAn/OneDrive - MWLR/code/R/utils/mcm_sp_utils.R")  
 
 } else {
   rootDrive <- "D:/"
 }
 
-elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF/")
+elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF_REV/")
 
 ```
 
@@ -136,22 +136,24 @@ mapview(ELF_2023_PREFINAL_CLIP_SMY, zcol = "LIM_TYPE")
 
 ```
 
-#Clean Full
 
+#=================================
+# Final Cleaning and Validation
+#=================================
+
+# Step 1. Read the merged layer
 
 ```{r}
-
-
-
-ELF_2023_PREFINAL_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL.gpkg")
-
+# ELF_2023_PREFINAL_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL.gpkg")
 
 
 ELF_2023_PREFINAL_ffn = paste0(elfdir, "DATA/MERGING_ELF_REV/L4_L5_MERGED.gpkg") 
 ELF_2023_PREFINAL = st_read(ELF_2023_PREFINAL_ffn)
+```
 
+# Step 2 and 3. Add the LIM_TYPE Integer and filter out polygons < 1ha
 
-
+```{r}
 ELF_2023_PREFINAL_FULL_CLEAN = ELF_2023_PREFINAL %>% 
   mutate(LIM_TYPE=
            strtoi(
@@ -163,6 +165,102 @@ ELF_2023_PREFINAL_FULL_CLEAN = ELF_2023_PREFINAL %>%
   ) %>% 
 ea_id_area() %>% 
   filter(POLY_AREA_HA > 1)
+```
+
+# Step 4. save this new layer
+
+```{r}
+ELF_2023_PREFINAL_FULL_CLEAN_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN.gpkg") 
+st_write(ELF_2023_PREFINAL_FULL_CLEAN, ELF_2023_PREFINAL_FULL_CLEAN_ffn, append = F)
+```
+
+
+# Step 5. Group the layer by the LIM_TYPE integer and summarise
+
+```{r}
+ELF_2023_PREFINAL_FULL_CLEAN_SMY = ELF_2023_PREFINAL_FULL_CLEAN %>% 
+  group_by(LIM_TYPE) %>% 
+  summarise(across(c(1:14,16), first))
+```
+
+# Step 6. Save the new summarised layer (ELF_2023_PREFINAL_FULL_CLEAN_SMY)
+
+```{r}
+ELF_2023_PREFINAL_FULL_CLEAN_SMY_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_SMY.gpkg") 
+st_write(ELF_2023_PREFINAL_FULL_CLEAN_SMY, ELF_2023_PREFINAL_FULL_CLEAN_SMY_ffn, append = F)
+```
+
+# Step 7. Fill any hole up to 1.5 ha then save as ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED.gpkg
+
+```{r}
+ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED = ELF_2023_PREFINAL_FULL_CLEAN_SMY %>% 
+  st_remove_holes(1.5*1e4) 
+
+ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED.gpkg") 
+st_write(ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED, ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED_ffn, append = F)
+```
+
+read the layer from disk if reqd
+
+```{r}
+ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED.gpkg") 
+
+ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED = st_read(ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED_ffn)
+```
+
+# Step 8. Now validate the layer, cast as multipolygons and save as "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED_VALID.gpkg"
+
+```{r}
+n_valid_before = length(which(st_is_valid(ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED )))
+
+ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED_VALID = ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED %>% 
+  st_make_valid() %>% 
+  st_cast("MULTIPOLYGON")
+
+n_valid_after = length(which(st_is_valid(ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED_VALID )))
+
+
+ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED_VALID_ffn = paste0(elfdir, "ELF-LAYER-2023-PREFINAL/ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED_VALID.gpkg") 
+st_write(ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED_VALID, ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED_VALID_ffn, append = F)
+```
+
+# Step 9. Rename this layer and save to the final directory
+
+```{r}
+
+ELF_2023_FINAL = ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED_VALID
+
+ELF_2023_FINAL_dn = paste0(elfdir, "ELF-LAYER-2023-FINAL/")
+
+ELF_2023_FINAL_SHP_dn = paste0(ELF_2023_FINAL_dn, "SHP/")
+ELF_2023_FINAL_SHP_fn = "ELF_2023_FINAL.shp"
+ELF_2023_FINAL_SHP_ffn = paste0(ELF_2023_FINAL_SHP_dn, ELF_2023_FINAL_SHP_fn)
+if (!dir.exists(ELF_2023_FINAL_SHP_dn)){dir.create(ELF_2023_FINAL_SHP_dn, recursive = T)}
+st_write(ELF_2023_FINAL, ELF_2023_FINAL_SHP_ffn, append = F)
+
+ELF_2023_FINAL_GPKG_dn = paste0(ELF_2023_FINAL_dn, "GPKG/")
+ELF_2023_FINAL_GPKG_fn = "ELF_2023_FINAL.gpkg"
+ELF_2023_FINAL_GPKG_ffn = paste0(ELF_2023_FINAL_GPKG_dn, ELF_2023_FINAL_GPKG_fn)
+if (!dir.exists(ELF_2023_FINAL_GPKG_dn)){dir.create(ELF_2023_FINAL_GPKG_dn, recursive = T)}
+st_write(ELF_2023_FINAL, ELF_2023_FINAL_GPKG_ffn, append = F)
+
+# The export to geodatabase can be done in QGIS
+
+# ELF_2023_FINAL_GDB_dn = paste0(ELF_2023_FINAL_dn, "GDB/")
+# ELF_2023_FINAL_GDB_fn = "ELF_2023_FINAL.gdb"
+# ELF_2023_FINAL_GDB_ffn = paste0(ELF_2023_FINAL_GDB_dn, ELF_2023_FINAL_GDB_fn)
+# if (!dir.exists(ELF_2023_FINAL_GDB_dn)){dir.create(ELF_2023_FINAL_GDB_dn, recursive = T)}
+# st_write(ELF_2023_FINAL, ELF_2023_FINAL_GDB_ffn, append = F)
+
+
+
+```
+
+
+```{r}
+mapview(ELF_2023_PREFINAL_FULL_CLEAN_SMY_HOLES_FILLED, zcol = "LIM_TYPE", alpha=0)
+
+#----
 
 mapview(ELF_2023_PREFINAL_FULL_CLEAN, zcol = "LIM_TYPE")
 

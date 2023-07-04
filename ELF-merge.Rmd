@@ -80,7 +80,7 @@ elf_merge_dir = paste0(elfdir, "DATA/MERGING_ELF_REV/")
 if(!dir.exists(elf_merge_dir)){dir.create(elf_merge_dir)}
 ```
 
-# function: find_overlapping 
+# function: merge_elf_layers
 
 ```{r}
 
