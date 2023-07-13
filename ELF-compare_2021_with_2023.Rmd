@@ -6,7 +6,7 @@ editor_options:
 ---
 
 
-Last updated 29/06/23 06:28
+Last updated 12/07/23 08:47
 
 # libraries and folders
 
@@ -85,8 +85,9 @@ plotdir = paste0(elfdir,"plots/")
 elf_final_dn = paste0(elfdir, "ELF-LAYER-2023-FINAL/")
 
 gc()
-ELF_2023_FINAL_ffn = paste0(elf_final_dn, "GPKG/ELF_2023_FINAL.gpkg")
-ELF_2023_FINAL = st_read(ELF_2023_FINAL_ffn)
+# ELF_2023_FINAL_ffn = paste0(elf_final_dn, "GPKG/ELF_2023_FINAL.gpkg")]
+ELF_2023_FINAL_ffn = paste0(elf_final_dn, "ELF_Revised_2023.gdb")
+ELF_2023_FINAL = st_read(dsn = ELF_2023_FINAL_ffn, layer = "ELF_Revised_2023")
 
 # read the 2012 Layer
 ELF_2012_ffn = paste0(elfdir, "DATA/mfe-environmental-limiting-factors-2012-SHP/environmental-limiting-factors-2012.shp")
@@ -158,14 +159,19 @@ figdesc = "Areas of Limitation 2012 and 2023 Bar Chart"
 figfmt = "png"
 fig_ffn = paste0(plotdir, fignum,"-", figdesc, ".", figfmt)
 
+
+ELF_AREA_SMY = ELF_AREA_SMY %>% filter(!is.na(LIMITATION))
+
 g = ggplot(ELF_AREA_SMY) + geom_bar(aes(LIMITATION, AREA_HA/1e3, fill = as.factor(ELF_VERSION)), stat = "identity", position = "dodge") + coord_flip()
   
-g = g + labs(y = "Area (kHa)", x = "Limitation", fill = "ELF Version")
+g = g + labs(y = "Area (kha)", x = "Limitation", fill = "ELF Version")
 
 g = g + scale_fill_manual(values = c("grey", "blue"))
 
 g = gab_style(g,3)
-
+g = g + theme(
+  axis.title = element_text(size = 12),
+  axis.text = element_text(size = 12))
 g
 
 ggsave(filename = fig_ffn, plot = g, units = "cm", bg = "white")

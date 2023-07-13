@@ -111,8 +111,14 @@ ELF_2012 = st_read(ELF_2012_ffn) %>%
 #   filter(POLY_AREA_HA >1)
 # ELF_2023 = ELF_2023_PREFINAL_FULL_CLEAN
 
-ELF_2023_ffn = paste0(elf_final_dn, "GPKG/ELF_2023_FINAL.gpkg")
-ELF_2023 = st_read(ELF_2023_ffn)
+# commented this out on 12/7/23. We are now using the gdb that Anne has validated and checked
+
+# ELF_2023_ffn = paste0(elf_final_dn, "GPKG/ELF_2023_FINAL.gpkg")
+# ELF_2023 = st_read(ELF_2023_ffn)
+
+ELF_2023_FINAL_ffn = paste0(elf_final_dn, "ELF_Revised_2023.gdb")
+ELF_2023 = st_read(dsn = ELF_2023_FINAL_ffn, layer = "ELF_Revised_2023")
+
 
 ncore_rec = 64
 
